@@ -1,0 +1,30 @@
+{
+  "name": "rapide-ticket",
+  "version": "1.0.0",
+  "description": "Bug reporting in-app for React Native",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "react-native-view-shot": "^3.x",
+    "react-native-device-info": "^10.x",
+    "@react-native-async-storage/async-storage": "^1.x",
+    "react-native-keychain": "^8.x",
+    "react-native-fs": "^2.x",
+    "react-native-reanimated": "^3.x",
+    "react-native-gesture-handler": "^2.x",
+    "react-native-sensors": "^7.x",
+    "axios": "^1.x"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.x",
+    "@types/react": "^18.x",
+    "@types/react-native": "^0.71.x"
+  }
+}
