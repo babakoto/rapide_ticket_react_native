@@ -1,3 +1,5 @@
+console.log("Starting RapideTicketProvider load");
+
 import { RapideTicketProvider, _rapideTicketRef } from './components/RapideTicketProvider';
 import { RapideTicketConfig, TicketPayload } from './types';
 
