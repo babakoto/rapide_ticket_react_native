@@ -1,32 +1,100 @@
 import { useState } from 'react';
-import { TicketPayload, RapideTicketConfig } from '../types';
-import { FlutteradgentsAPI } from '../services/FlutteradgentsAPI';
+import { RapideTicketConfig, IssueCreateResult, getIssueSummary } from '../types';
+import { RapideTicketAPI } from '../services/RapideTicketAPI';
 import { AuthService } from '../services/AuthService';
 import { OfflineQueue } from '../services/OfflineQueue';
 
-export const useTicketSubmit = (config: RapideTicketConfig) => {
-  const [loading, setLoading] = useState(false);
+export interface SubmitParams {
+  title: string;
+  description: string;
+  screenshotUri?: string | null;
+  gifUri?: string | null;
+}
 
-  const submit = async (payload: TicketPayload) => {
+export interface UseTicketSubmitResult {
+  submit: (params: SubmitParams) => Promise<IssueCreateResult | null>;
+  loading: boolean;
+  lastResult: IssueCreateResult | null;
+  error: string | null;
+}
+
+/**
+ * Submits a bug report to the rapide_ticket backend.
+ * - Uses multipart/form-data via RapideTicketAPI (correct endpoint).
+ * - Enriches description with device metadata automatically.
+ * - Falls back to OfflineQueue on network failure.
+ * - Attempts token refresh on 401.
+ */
+export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResult => {
+  const [loading, setLoading] = useState(false);
+  const [lastResult, setLastResult] = useState<IssueCreateResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (params: SubmitParams): Promise<IssueCreateResult | null> => {
     setLoading(true);
+    setError(null);
+
     try {
-      const token = await AuthService.getToken();
+      let token = await AuthService.getToken();
+
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated — please sign in first.');
       }
 
-      const api = new FlutteradgentsAPI(config.apiBaseUrl || '', config.projectId);
-      await api.submitTicket(payload, token);
-      
+      const api = new RapideTicketAPI(config);
+
+      let result: IssueCreateResult;
+      try {
+        result = await api.submitIssue(params, config, token);
+      } catch (err: any) {
+        // Attempt token refresh on auth errors (401-like messages)
+        if (
+          err?.message?.includes('401') ||
+          err?.message?.toLowerCase().includes('unauthorized') ||
+          err?.message?.toLowerCase().includes('expired')
+        ) {
+          try {
+            token = await AuthService.refreshAccessToken(config.apiBaseUrl);
+            result = await api.submitIssue(params, config, token);
+          } catch (refreshErr) {
+            throw refreshErr;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      setLastResult(result);
+
+      if (config.debug) {
+        console.log('[RapideTicket] Issue submitted:', getIssueSummary(result));
+      }
+
       setLoading(false);
-      return true;
-    } catch (error) {
-      console.warn('Submit failed, queueing offline', error);
-      await OfflineQueue.enqueue(payload);
+      return result;
+    } catch (err: any) {
+      const message = err?.message || 'Submission failed';
+      setError(message);
+      console.warn('[RapideTicket] Submit failed, queuing offline:', message);
+
+      // Offline fallback
+      try {
+        await OfflineQueue.enqueue({
+          title: params.title,
+          description: params.description,
+          priority: 'medium',
+          type: 'bug',
+          metadata: { screenshotUri: params.screenshotUri },
+          attachments: params.screenshotUri ? [params.screenshotUri] : [],
+        });
+      } catch (queueErr) {
+        console.error('[RapideTicket] Offline queue failed:', queueErr);
+      }
+
       setLoading(false);
-      return false; // Return false indicating it went to offline queue
+      return null;
     }
   };
 
-  return { submit, loading };
+  return { submit, loading, lastResult, error };
 };

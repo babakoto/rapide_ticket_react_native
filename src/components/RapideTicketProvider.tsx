@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { RapideTicketConfig } from '../types';
 import { SecretTriggerLayer } from './SecretTriggerLayer';
 import { RapideTicketModal } from './RapideTicketModal';
+import { captureScreen } from 'react-native-view-shot';
 
 interface RapideTicketContextValue {
   config: RapideTicketConfig;
@@ -30,27 +31,59 @@ export const _rapideTicketRef = {
 
 export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
   const [modalVisible, setModalVisible] = useState(false);
+  // Pre-captured screenshot taken BEFORE the modal opens
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const isCapturing = useRef(false);
 
   useEffect(() => {
     _rapideTicketRef.isReady = true;
-    _rapideTicketRef.openPanel = () => setModalVisible(true);
+    _rapideTicketRef.openPanel = () => openWithCapture();
     return () => {
       _rapideTicketRef.isReady = false;
     };
   }, []);
 
+  /**
+   * Captures the screen FIRST, then opens the modal.
+   * This mirrors the Flutter SDK behavior: the screenshot shows the app state
+   * before the report UI appeared.
+   */
+  const openWithCapture = async () => {
+    if (isCapturing.current || modalVisible) return;
+    isCapturing.current = true;
+    try {
+      const uri = await captureScreen({ format: 'png', quality: 0.8 });
+      setPreviewUri(uri);
+    } catch (e) {
+      console.warn('[RapideTicket] Screen capture failed:', e);
+      setPreviewUri(null);
+    } finally {
+      isCapturing.current = false;
+      setModalVisible(true);
+    }
+  };
+
+  const closePanel = () => {
+    setModalVisible(false);
+    setPreviewUri(null);
+  };
+
   return (
     <RapideTicketContext.Provider
       value={{
         config,
-        openPanel: () => setModalVisible(true),
-        closePanel: () => setModalVisible(false),
+        openPanel: openWithCapture,
+        closePanel,
       }}
     >
-      <SecretTriggerLayer config={config} onTrigger={() => setModalVisible(true)}>
+      <SecretTriggerLayer config={config} onTrigger={openWithCapture}>
         {children}
       </SecretTriggerLayer>
-      <RapideTicketModal visible={modalVisible} onClose={() => setModalVisible(false)} />
+      <RapideTicketModal
+        visible={modalVisible}
+        onClose={closePanel}
+        previewUri={previewUri}
+      />
     </RapideTicketContext.Provider>
   );
 };

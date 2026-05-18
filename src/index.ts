@@ -1,21 +1,30 @@
-console.log("Starting RapideTicketProvider load");
-
 import { RapideTicketProvider, _rapideTicketRef } from './components/RapideTicketProvider';
-import { RapideTicketConfig, TicketPayload } from './types';
+import {
+  RapideTicketConfig,
+  TicketPayload,
+  IssueCreateResult,
+  IssueSyncStatus,
+  getIssueSummary,
+} from './types';
+import { AuthService } from './services/AuthService';
+import { RapideTicketAPI } from './services/RapideTicketAPI';
+import { OfflineQueue } from './services/OfflineQueue';
 
 export { RapideTicketProvider };
-export type { RapideTicketConfig, TicketPayload };
+export { AuthService, RapideTicketAPI, OfflineQueue };
+export type { RapideTicketConfig, TicketPayload, IssueCreateResult, IssueSyncStatus };
+export { getIssueSummary };
 
 export const RapideTicket = {
   open: () => {
     if (_rapideTicketRef.isReady) {
       _rapideTicketRef.openPanel();
     } else {
-      console.warn('RapideTicketProvider not mounted');
+      console.warn('[RapideTicket] Provider not mounted');
     }
   },
   captureAndOpen: () => {
-    // Ideally inject logic to capture here then open
+    // Capture is now handled inside Provider before opening
     RapideTicket.open();
   },
   isReady: () => _rapideTicketRef.isReady,
