@@ -10,10 +10,25 @@ import { AuthService } from './services/AuthService';
 import { RapideTicketAPI } from './services/RapideTicketAPI';
 import { OfflineQueue } from './services/OfflineQueue';
 
+// Components
 export { RapideTicketProvider };
 export { AuthService, RapideTicketAPI, OfflineQueue };
 export type { RapideTicketConfig, TicketPayload, IssueCreateResult, IssueSyncStatus };
 export { getIssueSummary };
+
+// Widgets — sign-in
+export { SignInScreen }  from './components/SignInScreen';
+export { SignInDialog }  from './components/SignInDialog';
+export { SignInModal }   from './components/SignInModal';
+
+// Widgets — annotation + feedback overlay
+export { AnnotationEditor }       from './components/AnnotationEditor';
+export { SecretFeedbackOverlay }  from './components/SecretFeedbackOverlay';
+
+// Hooks
+export { useGifRecorder }   from './hooks/useGifRecorder';
+export { useTicketSubmit }  from './hooks/useTicketSubmit';
+export { useScreenCapture } from './hooks/useScreenCapture';
 
 export const RapideTicket = {
   open: () => {
@@ -24,7 +39,6 @@ export const RapideTicket = {
     }
   },
   captureAndOpen: () => {
-    // Capture is now handled inside Provider before opening
     RapideTicket.open();
   },
   isReady: () => _rapideTicketRef.isReady,

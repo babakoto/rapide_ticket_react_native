@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { RapideTicketConfig } from '../types';
 import { SecretTriggerLayer } from './SecretTriggerLayer';
 import { RapideTicketModal } from './RapideTicketModal';
-import { SignInModal } from './SignInModal';
+import { SignInScreen } from './SignInScreen';
 import { AuthService } from '../services/AuthService';
 import { captureScreen } from 'react-native-view-shot';
 
@@ -96,7 +96,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
       </SecretTriggerLayer>
 
       {/* Authentication gate — shown when user is not signed in */}
-      <SignInModal
+      <SignInScreen
         visible={signInVisible}
         config={config}
         onSuccess={handleSignInSuccess}
