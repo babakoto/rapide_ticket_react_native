@@ -9,6 +9,8 @@ export interface SubmitParams {
   description: string;
   screenshotUri?: string | null;
   gifUri?: string | null;
+  /** PNG frames captured by useGifRecorder (attached as screen_recording_N.png) */
+  recordingFrames?: string[];
 }
 
 export interface UseTicketSubmitResult {
@@ -45,7 +47,11 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
 
       let result: IssueCreateResult;
       try {
-        result = await api.submitIssue(params, config, token);
+        result = await api.submitIssue(
+          { ...params, recordingFrames: params.recordingFrames },
+          config,
+          token,
+        );
       } catch (err: any) {
         // Attempt token refresh on auth errors (401-like messages)
         if (
@@ -55,7 +61,11 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
         ) {
           try {
             token = await AuthService.refreshAccessToken(config.apiBaseUrl);
-            result = await api.submitIssue(params, config, token);
+            result = await api.submitIssue(
+              { ...params, recordingFrames: params.recordingFrames },
+              config,
+              token,
+            );
           } catch (refreshErr) {
             throw refreshErr;
           }

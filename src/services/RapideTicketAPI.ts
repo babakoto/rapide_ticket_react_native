@@ -25,6 +25,7 @@ export class RapideTicketAPI {
       description: string;
       screenshotUri?: string | null;
       gifUri?: string | null;
+      recordingFrames?: string[];
     },
     config: RapideTicketConfig,
     token: string,
@@ -58,6 +59,17 @@ export class RapideTicketAPI {
         name: 'rapide_ticket_screen_recording_0.gif',
         type: 'image/gif',
       } as any);
+    }
+
+    // Attach screen recording frames (PNG screenshots captured by useGifRecorder)
+    if (params.recordingFrames && params.recordingFrames.length > 0) {
+      params.recordingFrames.forEach((frameUri, i) => {
+        form.append('files', {
+          uri: frameUri,
+          name: `rapide_ticket_screen_recording_${i}.png`,
+          type: 'image/png',
+        } as any);
+      });
     }
 
     const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/issues`;
