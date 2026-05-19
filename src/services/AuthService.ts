@@ -3,6 +3,7 @@ import * as Keychain from 'react-native-keychain';
 const KEYCHAIN_SERVICE = 'rapide_ticket';
 const KEYCHAIN_USER = 'rapide_ticket_user';
 const REFRESH_TOKEN_SERVICE = 'rapide_ticket_refresh';
+const SIGN_IN_METHOD_SERVICE = 'rapide_ticket_sign_method';
 
 const DEFAULT_API_BASE_URL = 'https://api.flutteradgents.com';
 
@@ -69,6 +70,27 @@ export class AuthService {
     return !!token;
   }
 
+  /**
+   * Persists the sign-in method ('password' | 'atlassianOAuth') alongside the token.
+   * Read back by `getSignInMethod()` to drive the assignee picker.
+   */
+  static async setSignInMethod(method: 'password' | 'atlassianOAuth'): Promise<void> {
+    await Keychain.setGenericPassword(KEYCHAIN_USER, method, {
+      service: SIGN_IN_METHOD_SERVICE,
+    });
+  }
+
+  static async getSignInMethod(): Promise<'password' | 'atlassianOAuth' | 'none'> {
+    try {
+      const creds = await Keychain.getGenericPassword({ service: SIGN_IN_METHOD_SERVICE });
+      const v = creds ? creds.password : null;
+      if (v === 'password' || v === 'atlassianOAuth') return v;
+      return 'none';
+    } catch {
+      return 'none';
+    }
+  }
+
   // --- Auth API calls ---
 
   /**
@@ -97,6 +119,7 @@ export class AuthService {
     if (data.refreshToken) {
       await AuthService.setRefreshToken(data.refreshToken);
     }
+    await AuthService.setSignInMethod('password');
     return data;
   }
 
@@ -187,10 +210,12 @@ export class AuthService {
     if (data.refreshToken) {
       await AuthService.setRefreshToken(data.refreshToken);
     }
+    await AuthService.setSignInMethod('atlassianOAuth');
     return data;
   }
 
   static async signOut(): Promise<void> {
     await AuthService.clearToken();
+    await Keychain.resetGenericPassword({ service: SIGN_IN_METHOD_SERVICE });
   }
 }

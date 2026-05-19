@@ -29,6 +29,10 @@ export class RapideTicketAPI {
       videoUri?: string | null;
       recordingFrames?: string[];
       inviteToken?: string;
+      /** RapideTicket project-member UUID (password flow) */
+      assigneeUserId?: string | null;
+      /** Jira accountId (atlassianOAuth flow) */
+      jiraAssigneeAccountId?: string | null;
     },
     config: RapideTicketConfig,
     token: string,
@@ -49,6 +53,12 @@ export class RapideTicketAPI {
     form.append('clientPlatform', platform);
     if (params.inviteToken) {
       form.append('inviteToken', params.inviteToken);
+    }
+    // Assignee — mirrors Flutter issue_feedback_fields.dart
+    if (params.assigneeUserId) {
+      form.append('assigneeUserId', params.assigneeUserId);
+    } else if (params.jiraAssigneeAccountId) {
+      form.append('jiraAssigneeAccountId', params.jiraAssigneeAccountId);
     }
 
     if (params.screenshotUri) {

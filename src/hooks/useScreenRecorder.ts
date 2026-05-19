@@ -100,12 +100,15 @@ export function useScreenRecorder(opts: {
   maxFrames?: number;
   preferNative?: boolean;
   bitrate?: number;
+  /** Auto-stop after this many seconds (default: 30) */
+  maxDurationSeconds?: number;
 } = {}): ScreenRecorderState {
   const {
     fps        = FALLBACK_FPS,
     maxFrames  = FALLBACK_MAX_FRAMES,
     preferNative = true,
-    bitrate    = 2_000_000,
+    bitrate    = 500_000,   // 0.5 Mbps — keeps file size manageable for upload
+    maxDurationSeconds = 30,
   } = opts;
 
   const [state,   setState]   = useState<RecorderState>('idle');
@@ -114,6 +117,7 @@ export function useScreenRecorder(opts: {
 
   const canUseNative = useRef(preferNative && hasNativeRecorder()).current;
   const usingNative  = useRef(false);
+  const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs for timers / frame data
   const elapsedRef   = useRef(0);
@@ -133,6 +137,7 @@ export function useScreenRecorder(opts: {
 
   const _stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (autoStopRef.current) { clearTimeout(autoStopRef.current); autoStopRef.current = null; }
   }, []);
 
   // Frame-capture fallback
@@ -198,6 +203,10 @@ export function useScreenRecorder(opts: {
           usingNative.current = true;
           setState('recording');
           _startTimer();
+          // Auto-stop after maxDurationSeconds
+          autoStopRef.current = setTimeout(() => {
+            _handleStop();
+          }, maxDurationSeconds * 1000);
           return;
         }
       } catch (e) {
@@ -210,42 +219,14 @@ export function useScreenRecorder(opts: {
     setState('recording');
     _startTimer();
     _startFrameCapture();
-  }, [state, canUseNative, bitrate, _startTimer, _startFrameCapture]);
+    // Auto-stop fallback
+    autoStopRef.current = setTimeout(() => {
+      _handleStop();
+    }, maxDurationSeconds * 1000);
+  }, [state, canUseNative, bitrate, maxDurationSeconds, _startTimer, _startFrameCapture]);
 
-  // ── pause ────────────────────────────────────────────────────────────────
-  const pause = useCallback(async () => {
-    if (state !== 'recording') return;
-
-    _stopTimer();
-    pausedElapsedRef.current = elapsedRef.current;
-
-    if (usingNative.current) {
-      const recorder = getNativeRecorder();
-      try { await recorder.pauseRecording?.(); } catch (_) {}
-    } else {
-      _stopFrameCapture();
-    }
-    setState('paused');
-  }, [state, _stopTimer, _stopFrameCapture]);
-
-  // ── resume ───────────────────────────────────────────────────────────────
-  const resume = useCallback(async () => {
-    if (state !== 'paused') return;
-
-    elapsedRef.current = pausedElapsedRef.current;
-
-    if (usingNative.current) {
-      const recorder = getNativeRecorder();
-      try { await recorder.resumeRecording?.(); } catch (_) {}
-    } else {
-      _startFrameCapture();
-    }
-    setState('recording');
-    _startTimer();
-  }, [state, _startTimer, _startFrameCapture]);
-
-  // ── stop ─────────────────────────────────────────────────────────────────
-  const stop = useCallback(async (): Promise<ScreenRecorderResult> => {
+  // Internal stop logic
+  const _handleStop = useCallback(async (): Promise<ScreenRecorderResult> => {
     if (state === 'idle') {
       return { videoUri: null, frames: [], durationSeconds: 0, attachments: [] };
     }
@@ -284,6 +265,41 @@ export function useScreenRecorder(opts: {
 
     return { videoUri, frames: persistedFrames, durationSeconds: duration, attachments };
   }, [state, _stopTimer, _stopFrameCapture, _persistFrames]);
+
+  // ── pause ────────────────────────────────────────────────────────────────
+  const pause = useCallback(async () => {
+    if (state !== 'recording') return;
+
+    _stopTimer();
+    pausedElapsedRef.current = elapsedRef.current;
+
+    if (usingNative.current) {
+      const recorder = getNativeRecorder();
+      try { await recorder.pauseRecording?.(); } catch (_) {}
+    } else {
+      _stopFrameCapture();
+    }
+    setState('paused');
+  }, [state, _stopTimer, _stopFrameCapture]);
+
+  // ── resume ───────────────────────────────────────────────────────────────
+  const resume = useCallback(async () => {
+    if (state !== 'paused') return;
+
+    elapsedRef.current = pausedElapsedRef.current;
+
+    if (usingNative.current) {
+      const recorder = getNativeRecorder();
+      try { await recorder.resumeRecording?.(); } catch (_) {}
+    } else {
+      _startFrameCapture();
+    }
+    setState('recording');
+    _startTimer();
+  }, [state, _startTimer, _startFrameCapture]);
+
+  // ── stop ─────────────────────────────────────────────────────────────────
+  const stop = _handleStop;
 
   // ── reset ────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {

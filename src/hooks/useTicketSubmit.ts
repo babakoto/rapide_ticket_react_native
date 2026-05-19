@@ -15,6 +15,10 @@ export interface SubmitParams {
   recordingFrames?: string[];
   /** Optional invite token forwarded to the issue creation endpoint */
   inviteToken?: string;
+  /** RapideTicket project-member UUID (password flow) — mirrors assigneeUserId */
+  assigneeUserId?: string | null;
+  /** Jira accountId (atlassianOAuth flow) — mirrors jiraAssigneeAccountId */
+  jiraAssigneeAccountId?: string | null;
 }
 
 export interface UseTicketSubmitResult {
@@ -52,7 +56,14 @@ export const useTicketSubmit = (config: RapideTicketConfig, inviteToken?: string
       let result: IssueCreateResult;
       try {
         result = await api.submitIssue(
-          { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames, inviteToken },
+          {
+            ...params,
+            videoUri: params.videoUri,
+            recordingFrames: params.recordingFrames,
+            inviteToken,
+            assigneeUserId: params.assigneeUserId,
+            jiraAssigneeAccountId: params.jiraAssigneeAccountId,
+          },
           config,
           token,
         );

@@ -6,9 +6,10 @@
  *  - Native screen recorder (MP4 via react-native-record-screen)
  *    with live timer, pause/resume and dock-mode state
  *  - Frame-capture fallback when native recorder is unavailable
- *  - Multipart submission (screenshot + video or frames)
+ *  - Assignee picker (mirrors Flutter TicketAssignablePerson)
+ *  - Multipart submission (screenshot + video or frames + assignee)
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -22,14 +23,17 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
+  FlatList,
 } from 'react-native';
 import { useTicketSubmit }    from '../hooks/useTicketSubmit';
 import { useScreenRecorder }  from '../hooks/useScreenRecorder';
 import { useScreenCapture }   from '../hooks/useScreenCapture';
+import { useAssignees }       from '../hooks/useAssignees';
 import { useRapideTicket }    from './RapideTicketProvider';
 import { AnnotationEditor }   from './AnnotationEditor';
 import { SecretFeedbackOverlay, DockMode } from './SecretFeedbackOverlay';
-import { getIssueSummary }    from '../types';
+import { getIssueSummary, TicketAssignablePerson, SignInMethod } from '../types';
+import { AuthService }        from '../services/AuthService';
 
 interface Props {
   visible: boolean;
@@ -45,6 +49,27 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   const { setImageUri } = useScreenCapture();
   const { submit, loading, error } = useTicketSubmit(config, inviteToken);
 
+  // Sign-in method drives the assignee list source
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>('none');
+
+  // Load sign-in method when modal opens
+  useEffect(() => {
+    if (visible) {
+      (async () => {
+        let method = await AuthService.getSignInMethod();
+        // Fallback for sessions created before sign-in method was persisted:
+        // if a token exists, treat the session as 'password' (most common flow).
+        if (method === 'none') {
+          const hasToken = await AuthService.isSignedIn();
+          if (hasToken) method = 'password';
+        }
+        setSignInMethod(method);
+      })();
+    }
+  }, [visible]);
+
+  const { assignees, loading: assigneesLoading } = useAssignees(config, signInMethod);
+
   // Screen recorder (native MP4 + fallback frames)
   const recorder = useScreenRecorder({
     fps:      config.gif?.fps ?? 2,
@@ -52,15 +77,17 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     preferNative: true,
   });
 
-  const [screen,       setScreen]       = useState<Screen>('form');
-  const [title,        setTitle]        = useState('');
-  const [description,  setDescription]  = useState('');
-  const [annotatedUri, setAnnotatedUri] = useState<string | null>(null);
-  const [dockMode,     setDockMode]     = useState<DockMode>('home');
-  const [recordResult, setRecordResult] = useState<{
+  const [screen,          setScreen]          = useState<Screen>('form');
+  const [title,           setTitle]           = useState('');
+  const [description,     setDescription]     = useState('');
+  const [annotatedUri,    setAnnotatedUri]    = useState<string | null>(null);
+  const [dockMode,        setDockMode]        = useState<DockMode>('home');
+  const [recordResult,    setRecordResult]    = useState<{
     videoUri: string | null;
     frames: string[];
   } | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState<TicketAssignablePerson | null>(null);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
 
   const effectiveUri = annotatedUri || previewUri;
 
@@ -73,6 +100,8 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
       setScreen('form');
       setDockMode('home');
       setRecordResult(null);
+      setSelectedAssignee(null);
+      setShowAssigneePicker(false);
     } else {
       recorder.reset();
     }
@@ -128,12 +157,18 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
       finalRecording = { videoUri: r.videoUri, frames: r.frames };
     }
 
+    // Resolve assignee fields from selected person (mirrors Flutter issue_feedback_fields.dart)
+    const assigneeUserId         = selectedAssignee?.userId        ?? null;
+    const jiraAssigneeAccountId  = selectedAssignee?.accountId     ?? null;
+
     const result = await submit({
       title:          trimmedTitle,
       description:    trimmedDesc,
       screenshotUri:  effectiveUri,
       videoUri:       finalRecording?.videoUri ?? null,
       recordingFrames: finalRecording?.frames ?? [],
+      assigneeUserId,
+      jiraAssigneeAccountId,
     });
 
     if (result) {
@@ -164,6 +199,80 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
       </Modal>
     );
   }
+
+  // ── Assignee picker modal ─────────────────────────────────────────────
+  const assigneePickerModal = (
+    <Modal
+      visible={showAssigneePicker}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={() => setShowAssigneePicker(false)}
+    >
+      <View style={styles.pickerOverlay}>
+        <View style={styles.pickerSheet}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Assigner à</Text>
+            <TouchableOpacity onPress={() => setShowAssigneePicker(false)} style={styles.pickerCloseBtn}>
+              <Text style={styles.pickerCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {assigneesLoading ? (
+            <View style={styles.pickerLoading}>
+              <ActivityIndicator color={INDIGO} />
+              <Text style={styles.pickerLoadingText}>Chargement…</Text>
+            </View>
+          ) : assignees.length === 0 ? (
+            <View style={styles.pickerEmpty}>
+              <Text style={styles.pickerEmptyText}>Aucun assignee disponible</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={[{ stableKey: '__none__', displayName: 'Non assigné', accountId: undefined, userId: undefined } as TicketAssignablePerson, ...assignees]}
+              keyExtractor={(item) => item.stableKey}
+              contentContainerStyle={styles.pickerList}
+              renderItem={({ item }) => {
+                const isNone     = item.stableKey === '__none__';
+                const isSelected = isNone
+                  ? selectedAssignee === null
+                  : selectedAssignee?.stableKey === item.stableKey;
+                return (
+                  <TouchableOpacity
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setSelectedAssignee(isNone ? null : item);
+                      setShowAssigneePicker(false);
+                    }}
+                  >
+                    {/* Avatar / initials */}
+                    <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
+                      {item.avatarUrl && !isNone ? (
+                        <Image source={{ uri: item.avatarUrl }} style={styles.avatarImage} />
+                      ) : (
+                        <Text style={[styles.avatarInitial, isSelected && styles.avatarInitialSelected]}>
+                          {isNone ? '—' : item.displayName.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.pickerItemInfo}>
+                      <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]}>
+                        {item.displayName}
+                      </Text>
+                      {item.email ? (
+                        <Text style={styles.pickerItemEmail}>{item.email}</Text>
+                      ) : null}
+                    </View>
+                    {isSelected && <Text style={styles.pickerCheckmark}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
   // ── Recording badge ───────────────────────────────────────────────────
   const recordingBadge = (() => {
@@ -196,140 +305,183 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
 
   // ── Main form ─────────────────────────────────────────────────────────
   return (
-    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.sheet}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.grip} />
-            <Text style={styles.headerTitle}>Signaler un problème</Text>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={styles.body}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Screenshot preview */}
-            {effectiveUri ? (
-              <View style={styles.screenshotRow}>
-                <View style={styles.screenshotBox}>
-                  <Image source={{ uri: effectiveUri }} style={styles.screenshot} resizeMode="contain" />
-                  {annotatedUri && (
-                    <View style={styles.annotatedBadge}>
-                      <Text style={styles.annotatedBadgeText}>✏️ Annoté</Text>
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.annotateBtn}
-                  onPress={() => setScreen('annotate')}
-                  disabled={loading}
-                >
-                  <Text style={styles.annotateBtnIcon}>✏️</Text>
-                  <Text style={styles.annotateBtnText}>Annoter</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            {/* Recording controls */}
-            <View style={styles.recorderRow}>
-              <View style={styles.recorderInfo}>
-                <Text style={styles.recorderLabel}>
-                  🎬 Enregistrement écran
-                </Text>
-                <Text style={styles.recorderSub}>
-                  {recorder.canUseNative
-                    ? 'Capture native (vidéo MP4 — WebViews inclus)'
-                    : 'Capture par frames PNG'
-                  }
-                </Text>
-                {recordingBadge}
-              </View>
-
-              <View style={styles.recButtons}>
-                {(recorder.state === 'idle' || recorder.state === 'stopped') && (
-                  <TouchableOpacity
-                    style={[styles.recBtn, styles.recBtnStart]}
-                    onPress={handleGifStart}
-                    disabled={loading}
-                  >
-                    <Text style={styles.recBtnText}>⏺ Démarrer</Text>
-                  </TouchableOpacity>
-                )}
-                {recorder.state === 'recording' && (
-                  <>
-                    <TouchableOpacity style={[styles.recBtn, styles.recBtnPause]} onPress={handleGifPauseResume}>
-                      <Text style={styles.recBtnText}>⏸ Pause</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
-                      <Text style={styles.recBtnText}>⏹ Stop</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                {recorder.state === 'paused' && (
-                  <>
-                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStart]} onPress={handleGifPauseResume}>
-                      <Text style={styles.recBtnText}>▶ Reprendre</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
-                      <Text style={styles.recBtnText}>⏹ Stop</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
+    <>
+      {assigneePickerModal}
+      <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.sheet}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.grip} />
+              <Text style={styles.headerTitle}>Signaler un problème</Text>
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Error */}
-            {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
-
-            {/* Title */}
-            <Text style={styles.label}>Titre <Text style={styles.req}>*</Text></Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex. : crash sur l'écran d'accueil"
-              placeholderTextColor="#aaa"
-              value={title}
-              onChangeText={setTitle}
-              editable={!loading}
-              returnKeyType="next"
-              maxLength={255}
-            />
-
-            {/* Description */}
-            <Text style={styles.label}>Description <Text style={styles.req}>*</Text></Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Décrivez les étapes pour reproduire le problème…"
-              placeholderTextColor="#aaa"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={5}
-              editable={!loading}
-            />
-
-            {/* Submit */}
-            <TouchableOpacity
-              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
+            <ScrollView
+              contentContainerStyle={styles.body}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              {loading
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.submitBtnText}>Envoyer le ticket</Text>
-              }
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+              {/* Screenshot preview */}
+              {effectiveUri ? (
+                <View style={styles.screenshotRow}>
+                  <View style={styles.screenshotBox}>
+                    <Image source={{ uri: effectiveUri }} style={styles.screenshot} resizeMode="contain" />
+                    {annotatedUri && (
+                      <View style={styles.annotatedBadge}>
+                        <Text style={styles.annotatedBadgeText}>✏️ Annoté</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.annotateBtn}
+                    onPress={() => setScreen('annotate')}
+                    disabled={loading}
+                  >
+                    <Text style={styles.annotateBtnIcon}>✏️</Text>
+                    <Text style={styles.annotateBtnText}>Annoter</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {/* Recording controls */}
+              <View style={styles.recorderRow}>
+                <View style={styles.recorderInfo}>
+                  <Text style={styles.recorderLabel}>
+                    🎬 Enregistrement écran
+                  </Text>
+                  <Text style={styles.recorderSub}>
+                    {recorder.canUseNative
+                      ? 'Capture native (vidéo MP4 — WebViews inclus)'
+                      : 'Capture par frames PNG'
+                    }
+                  </Text>
+                  {recordingBadge}
+                </View>
+
+                <View style={styles.recButtons}>
+                  {(recorder.state === 'idle' || recorder.state === 'stopped') && (
+                    <TouchableOpacity
+                      style={[styles.recBtn, styles.recBtnStart]}
+                      onPress={handleGifStart}
+                      disabled={loading}
+                    >
+                      <Text style={styles.recBtnText}>⏺ Démarrer</Text>
+                    </TouchableOpacity>
+                  )}
+                  {recorder.state === 'recording' && (
+                    <>
+                      <TouchableOpacity style={[styles.recBtn, styles.recBtnPause]} onPress={handleGifPauseResume}>
+                        <Text style={styles.recBtnText}>⏸ Pause</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
+                        <Text style={styles.recBtnText}>⏹ Stop</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {recorder.state === 'paused' && (
+                    <>
+                      <TouchableOpacity style={[styles.recBtn, styles.recBtnStart]} onPress={handleGifPauseResume}>
+                        <Text style={styles.recBtnText}>▶ Reprendre</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
+                        <Text style={styles.recBtnText}>⏹ Stop</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </View>
+
+              {/* Error */}
+              {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
+
+              {/* Title */}
+              <Text style={styles.label}>Titre <Text style={styles.req}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex. : crash sur l'écran d'accueil"
+                placeholderTextColor="#aaa"
+                value={title}
+                onChangeText={setTitle}
+                editable={!loading}
+                returnKeyType="next"
+                maxLength={255}
+              />
+
+              {/* Description */}
+              <Text style={styles.label}>Description <Text style={styles.req}>*</Text></Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Décrivez les étapes pour reproduire le problème…"
+                placeholderTextColor="#aaa"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={5}
+                editable={!loading}
+              />
+
+              {/* Assignee picker */}
+              {signInMethod !== 'none' && (
+                <>
+                  <Text style={styles.label}>Assigné à</Text>
+                  <TouchableOpacity
+                    style={[styles.assigneeBtn, loading && styles.assigneeBtnDisabled]}
+                    onPress={() => setShowAssigneePicker(true)}
+                    disabled={loading || assigneesLoading}
+                    activeOpacity={0.75}
+                  >
+                    {selectedAssignee ? (
+                      <View style={styles.assigneeBtnContent}>
+                        <View style={styles.avatarSmall}>
+                          {selectedAssignee.avatarUrl ? (
+                            <Image source={{ uri: selectedAssignee.avatarUrl }} style={styles.avatarImageSmall} />
+                          ) : (
+                            <Text style={styles.avatarInitialSmall}>
+                              {selectedAssignee.displayName.charAt(0).toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={styles.assigneeBtnText}>{selectedAssignee.displayName}</Text>
+                        <Text style={styles.assigneeBtnChevron}>›</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.assigneeBtnContent}>
+                        {assigneesLoading
+                          ? <ActivityIndicator size="small" color={INDIGO} style={{ marginRight: 8 }} />
+                          : <Text style={styles.assigneePlaceholderIcon}>👤</Text>
+                        }
+                        <Text style={styles.assigneePlaceholder}>
+                          {assigneesLoading ? 'Chargement…' : 'Choisir un assignee (optionnel)'}
+                        </Text>
+                        <Text style={styles.assigneeBtnChevron}>›</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Submit */}
+              <TouchableOpacity
+                style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.submitBtnText}>Envoyer le ticket</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 };
 
@@ -409,6 +561,27 @@ const styles = StyleSheet.create({
 
   errorText: { fontSize: 13, color: RED, fontWeight: '600' },
 
+  // Assignee button (trigger)
+  assigneeBtn: {
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    backgroundColor: '#fafafa',
+  },
+  assigneeBtnDisabled: { opacity: 0.55 },
+  assigneeBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  assigneeBtnText: { flex: 1, fontSize: 15, color: '#1a1a2e', fontWeight: '500' },
+  assigneeBtnChevron: { fontSize: 20, color: '#aaa', marginLeft: 4 },
+  assigneePlaceholderIcon: { fontSize: 16 },
+  assigneePlaceholder: { flex: 1, fontSize: 15, color: '#aaa' },
+
+  // Avatar (small — inside button)
+  avatarSmall: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: INDIGO + '22', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  avatarImageSmall: { width: 28, height: 28, borderRadius: 14 },
+  avatarInitialSmall: { fontSize: 13, fontWeight: '700', color: INDIGO },
+
   // Submit
   submitBtn: {
     backgroundColor: INDIGO, borderRadius: 14,
@@ -416,4 +589,46 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.55 },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  // ── Picker modal ──────────────────────────────────────────────────────
+  pickerOverlay: {
+    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  pickerSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    maxHeight: '70%', paddingBottom: 32,
+  },
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  pickerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
+  pickerCloseBtn: { padding: 6 },
+  pickerCloseText: { fontSize: 18, color: '#888' },
+  pickerLoading: { padding: 32, alignItems: 'center', gap: 12 },
+  pickerLoadingText: { color: '#9ca3af', fontSize: 14 },
+  pickerEmpty: { padding: 32, alignItems: 'center' },
+  pickerEmptyText: { color: '#9ca3af', fontSize: 15 },
+  pickerList: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
+
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 12,
+    borderRadius: 14, marginBottom: 4,
+  },
+  pickerItemSelected: { backgroundColor: INDIGO + '12' },
+  avatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  avatarSelected: { backgroundColor: INDIGO + '22' },
+  avatarImage: { width: 40, height: 40, borderRadius: 20 },
+  avatarInitial: { fontSize: 16, fontWeight: '700', color: '#6b7280' },
+  avatarInitialSelected: { color: INDIGO },
+  pickerItemInfo: { flex: 1 },
+  pickerItemName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e' },
+  pickerItemNameSelected: { color: INDIGO },
+  pickerItemEmail: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  pickerCheckmark: { fontSize: 18, color: INDIGO, fontWeight: '700' },
 });
