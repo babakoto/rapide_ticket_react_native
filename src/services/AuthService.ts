@@ -54,6 +54,21 @@ export class AuthService {
     await Keychain.resetGenericPassword({ service: REFRESH_TOKEN_SERVICE });
   }
 
+  /**
+   * Convenience: store both access token and refresh token in one call.
+   * Used by RapideTicketAPIClient after any successful auth.
+   */
+  static async storeTokens(accessToken: string, refreshToken?: string): Promise<void> {
+    await AuthService.setToken(accessToken);
+    if (refreshToken) await AuthService.setRefreshToken(refreshToken);
+  }
+
+  /** Returns true when a valid access token is stored. */
+  static async isSignedIn(): Promise<boolean> {
+    const token = await AuthService.getToken();
+    return !!token;
+  }
+
   // --- Auth API calls ---
 
   /**

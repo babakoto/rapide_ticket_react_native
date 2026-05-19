@@ -13,8 +13,14 @@ import { OfflineQueue } from './services/OfflineQueue';
 // Components
 export { RapideTicketProvider };
 export { AuthService, RapideTicketAPI, OfflineQueue };
-export type { RapideTicketConfig, TicketPayload, IssueCreateResult, IssueSyncStatus };
-export { getIssueSummary };
+export { RapideTicketAPIClient } from './services/RapideTicketAPIClient';
+export type { RapideTicketConfig, TicketPayload, IssueCreateResult, IssueSyncStatus } from './types';
+export type {
+  JiraAssignableUser,
+  ProjectMember,
+  CreateIssueParams,
+} from './services/RapideTicketAPIClient';
+export { getIssueSummary } from './services/RapideTicketAPIClient';
 
 // Widgets — sign-in
 export { SignInScreen }  from './components/SignInScreen';
