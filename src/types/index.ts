@@ -139,7 +139,9 @@ export interface CreateIssueParams {
   jiraAssigneeAccountId?: string;
   /** Screenshot file URI (PNG / JPG / GIF) */
   screenshotUri?: string | null;
-  /** Screen recording frames (PNG URIs captured by useGifRecorder) */
+  /** MP4 file URI from native screen recorder (takes priority over frames) */
+  videoUri?: string | null;
+  /** Screen recording frames — PNG URIs (frame-capture fallback) */
   recordingFrames?: string[];
 }
 

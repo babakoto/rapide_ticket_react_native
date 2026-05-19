@@ -183,7 +183,7 @@ export class RapideTicketAPIClient {
    *   priority              ← params.priority        (URGENT/IMPORTANT/NORMAL/LESS_URGENT)
    *   assigneeUserId        ← params.assigneeUserId  (RT UUID, takes priority)
    *   jiraAssigneeAccountId ← params.jiraAssigneeAccountId
-   *   files[]               ← screenshotUri + recordingFrames
+   *   files[]               ← screenshotUri + videoUri (MP4) or recordingFrames (PNG)
    *
    * Automatically retries once with a refreshed token on 401 / 403.
    */
@@ -230,8 +230,22 @@ export class RapideTicketAPIClient {
       form.append('files', { uri, name: `rapide_ticket_feedback.${ext}`, type: mime } as any);
     }
 
-    // Screen recording frames — mirrors additionalGifRecordings loop
-    if (params.recordingFrames?.length) {
+    // Attachments priority (mirrors Flutter IssuesApi):
+    //   1. Native video (MP4) from screen recorder
+    //   2. Frame PNGs (fallback capture)
+
+    // Native video recording — MP4
+    if (params.videoUri) {
+      const uri = params.videoUri;
+      form.append('files', {
+        uri,
+        name: 'rapide_ticket_screen_recording.mp4',
+        type: 'video/mp4',
+      } as any);
+    }
+
+    // Screen recording frames (PNG fallback) — only when no video
+    if (!params.videoUri && params.recordingFrames?.length) {
       params.recordingFrames.forEach((uri, i) => {
         form.append('files', {
           uri,

@@ -57,6 +57,8 @@ export { SecretFeedbackOverlay }  from './components/SecretFeedbackOverlay';
 
 // ─── Hooks ──────────────────────────────────────────────────────────────────
 export { useGifRecorder }    from './hooks/useGifRecorder';
+export { useScreenRecorder } from './hooks/useScreenRecorder';
+export type { ScreenRecorderResult, ScreenRecorderState, RecorderState } from './hooks/useScreenRecorder';
 export { useTicketSubmit }   from './hooks/useTicketSubmit';
 export { useScreenCapture }  from './hooks/useScreenCapture';
 

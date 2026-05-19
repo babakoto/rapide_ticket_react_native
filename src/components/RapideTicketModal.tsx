@@ -1,3 +1,13 @@
+/**
+ * RapideTicketModal — Bug-report sheet
+ *
+ * Features:
+ *  - Screenshot preview + AnnotationEditor
+ *  - Native screen recorder (MP4 via react-native-record-screen)
+ *    with live timer, pause/resume and dock-mode state
+ *  - Frame-capture fallback when native recorder is unavailable
+ *  - Multipart submission (screenshot + video or frames)
+ */
 import React, { useState, useEffect } from 'react';
 import {
   Modal,
@@ -13,12 +23,13 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useTicketSubmit } from '../hooks/useTicketSubmit';
-import { useGifRecorder } from '../hooks/useGifRecorder';
-import { useScreenCapture } from '../hooks/useScreenCapture';
-import { useRapideTicket } from './RapideTicketProvider';
-import { AnnotationEditor } from './AnnotationEditor';
-import { getIssueSummary } from '../types';
+import { useTicketSubmit }    from '../hooks/useTicketSubmit';
+import { useScreenRecorder }  from '../hooks/useScreenRecorder';
+import { useScreenCapture }   from '../hooks/useScreenCapture';
+import { useRapideTicket }    from './RapideTicketProvider';
+import { AnnotationEditor }   from './AnnotationEditor';
+import { SecretFeedbackOverlay, DockMode } from './SecretFeedbackOverlay';
+import { getIssueSummary }    from '../types';
 
 interface Props {
   visible: boolean;
@@ -32,65 +43,100 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   const { config } = useRapideTicket();
   const { setImageUri } = useScreenCapture();
   const { submit, loading, error } = useTicketSubmit(config);
-  const recorder = useGifRecorder(config.gif?.enabled ?? true, config.gif?.fps);
 
-  const [screen, setScreen] = useState<Screen>('form');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  // Screen recorder (native MP4 + fallback frames)
+  const recorder = useScreenRecorder({
+    fps:      config.gif?.fps ?? 2,
+    maxFrames: config.gif?.maxFrames ?? 60,
+    preferNative: true,
+  });
+
+  const [screen,       setScreen]       = useState<Screen>('form');
+  const [title,        setTitle]        = useState('');
+  const [description,  setDescription]  = useState('');
   const [annotatedUri, setAnnotatedUri] = useState<string | null>(null);
+  const [dockMode,     setDockMode]     = useState<DockMode>('home');
+  const [recordResult, setRecordResult] = useState<{
+    videoUri: string | null;
+    frames: string[];
+  } | null>(null);
 
   const effectiveUri = annotatedUri || previewUri;
 
+  // ── Reset on open/close ───────────────────────────────────────────────
   useEffect(() => {
     if (visible) {
       setTitle('');
       setDescription('');
       setAnnotatedUri(null);
       setScreen('form');
+      setDockMode('home');
+      setRecordResult(null);
     } else {
-      if (recorder.isRecording) recorder.stopRecording();
-      recorder.clearFrames();
+      recorder.reset();
     }
   }, [visible]);
 
-  const handleAnnotationDone = (uri: string) => {
-    setAnnotatedUri(uri);
-    setScreen('form');
+  // ── Dock action handlers ──────────────────────────────────────────────
+
+  const handleRecordGif = () => setDockMode('gifReady');
+
+  const handleGifBack = () => {
+    recorder.reset();
+    setDockMode('home');
   };
 
-  const handleToggleRecording = async () => {
-    if (recorder.isRecording) {
-      await recorder.stopRecording();
-    } else {
-      recorder.startRecording();
+  const handleGifStart = async () => {
+    await recorder.start();
+    setDockMode('gifRecording');
+  };
+
+  const handleGifPauseResume = async () => {
+    if (recorder.state === 'recording') {
+      await recorder.pause();
+    } else if (recorder.state === 'paused') {
+      await recorder.resume();
     }
   };
 
+  const handleGifStop = async () => {
+    const result = await recorder.stop();
+    setRecordResult({ videoUri: result.videoUri, frames: result.frames });
+    setDockMode('home');
+    Alert.alert(
+      '🎬 Enregistrement terminé',
+      result.videoUri
+        ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
+        : `${result.frames.length} frames PNG capturées.`,
+    );
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     const trimmedTitle = title.trim();
-    const trimmedDesc = description.trim();
+    const trimmedDesc  = description.trim();
     if (!trimmedTitle || !trimmedDesc) {
       Alert.alert('Champs requis', 'Veuillez remplir le titre et la description.');
       return;
     }
 
-    // Stop recording and collect frames if any
-    let frames: string[] = [];
-    if (recorder.isRecording) {
-      frames = await recorder.stopRecording();
+    // Stop recorder if still running
+    let finalRecording = recordResult;
+    if (recorder.state === 'recording' || recorder.state === 'paused') {
+      const r = await recorder.stop();
+      finalRecording = { videoUri: r.videoUri, frames: r.frames };
     }
 
     const result = await submit({
-      title: trimmedTitle,
-      description: trimmedDesc,
-      screenshotUri: effectiveUri,
-      recordingFrames: frames,
+      title:          trimmedTitle,
+      description:    trimmedDesc,
+      screenshotUri:  effectiveUri,
+      videoUri:       finalRecording?.videoUri ?? null,
+      recordingFrames: finalRecording?.frames ?? [],
     });
 
     if (result) {
-      Alert.alert('✅ Ticket envoyé', getIssueSummary(result), [
-        { text: 'OK', onPress: onClose },
-      ]);
+      Alert.alert('✅ Ticket envoyé', getIssueSummary(result), [{ text: 'OK', onPress: onClose }]);
     } else {
       Alert.alert(
         '📡 Hors ligne',
@@ -100,7 +146,12 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     }
   };
 
-  // ─── Annotation screen ───────────────────────────────────────────────────
+  const handleAnnotationDone = (uri: string) => {
+    setAnnotatedUri(uri);
+    setScreen('form');
+  };
+
+  // ── Annotation full-screen ────────────────────────────────────────────
   if (screen === 'annotate' && effectiveUri) {
     return (
       <Modal visible={visible} animationType="fade" statusBarTranslucent>
@@ -113,7 +164,36 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     );
   }
 
-  // ─── Main form screen ─────────────────────────────────────────────────────
+  // ── Recording badge ───────────────────────────────────────────────────
+  const recordingBadge = (() => {
+    if (recorder.state === 'recording' || recorder.state === 'paused') {
+      return (
+        <View style={styles.recBadge}>
+          <View style={[styles.recDot, recorder.state === 'paused' && styles.recDotPaused]} />
+          <Text style={styles.recTimer}>{recorder.timerLabel}</Text>
+          {recorder.isNative
+            ? <Text style={styles.recMode}>📹 MP4</Text>
+            : <Text style={styles.recMode}>🖼 {recorder.frameCount} frames</Text>
+          }
+        </View>
+      );
+    }
+    if (recordResult) {
+      return (
+        <View style={[styles.recBadge, styles.recBadgeDone]}>
+          <Text style={styles.recDoneText}>
+            {recordResult.videoUri
+              ? '✅ Vidéo MP4 prête'
+              : `✅ ${recordResult.frames.length} frames capturées`
+            }
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  })();
+
+  // ── Main form ─────────────────────────────────────────────────────────
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <KeyboardAvoidingView
@@ -135,20 +215,16 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Screenshot preview + annotation button */}
+            {/* Screenshot preview */}
             {effectiveUri ? (
               <View style={styles.screenshotRow}>
                 <View style={styles.screenshotBox}>
-                  <Image
-                    source={{ uri: effectiveUri }}
-                    style={styles.screenshot}
-                    resizeMode="contain"
-                  />
-                  {annotatedUri ? (
+                  <Image source={{ uri: effectiveUri }} style={styles.screenshot} resizeMode="contain" />
+                  {annotatedUri && (
                     <View style={styles.annotatedBadge}>
                       <Text style={styles.annotatedBadgeText}>✏️ Annoté</Text>
                     </View>
-                  ) : null}
+                  )}
                 </View>
                 <TouchableOpacity
                   style={styles.annotateBtn}
@@ -161,203 +237,182 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
               </View>
             ) : null}
 
-            {/* Screen recorder toggle */}
+            {/* Recording controls */}
             <View style={styles.recorderRow}>
               <View style={styles.recorderInfo}>
-                <Text style={styles.recorderLabel}>Enregistrement écran</Text>
-                {recorder.isRecording ? (
-                  <Text style={styles.recorderFrames}>
-                    {recorder.frameCount} frame{recorder.frameCount > 1 ? 's' : ''} capturée{recorder.frameCount > 1 ? 's' : ''}
-                  </Text>
-                ) : recorder.frameCount > 0 ? (
-                  <Text style={styles.recorderFrames}>
-                    ✅ {recorder.frameCount} frame{recorder.frameCount > 1 ? 's' : ''} enregistrée{recorder.frameCount > 1 ? 's' : ''}
-                  </Text>
-                ) : null}
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.recorderBtn,
-                  recorder.isRecording && styles.recorderBtnActive,
-                ]}
-                onPress={handleToggleRecording}
-                disabled={loading}
-              >
-                <Text style={styles.recorderBtnText}>
-                  {recorder.isRecording ? '⏹ Stop' : '⏺ REC'}
+                <Text style={styles.recorderLabel}>
+                  🎬 Enregistrement écran
                 </Text>
-              </TouchableOpacity>
+                <Text style={styles.recorderSub}>
+                  {recorder.canUseNative
+                    ? 'Capture native (vidéo MP4 — WebViews inclus)'
+                    : 'Capture par frames PNG'
+                  }
+                </Text>
+                {recordingBadge}
+              </View>
+
+              <View style={styles.recButtons}>
+                {(recorder.state === 'idle' || recorder.state === 'stopped') && (
+                  <TouchableOpacity
+                    style={[styles.recBtn, styles.recBtnStart]}
+                    onPress={handleGifStart}
+                    disabled={loading}
+                  >
+                    <Text style={styles.recBtnText}>⏺ Démarrer</Text>
+                  </TouchableOpacity>
+                )}
+                {recorder.state === 'recording' && (
+                  <>
+                    <TouchableOpacity style={[styles.recBtn, styles.recBtnPause]} onPress={handleGifPauseResume}>
+                      <Text style={styles.recBtnText}>⏸ Pause</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
+                      <Text style={styles.recBtnText}>⏹ Stop</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                {recorder.state === 'paused' && (
+                  <>
+                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStart]} onPress={handleGifPauseResume}>
+                      <Text style={styles.recBtnText}>▶ Reprendre</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.recBtn, styles.recBtnStop]} onPress={handleGifStop}>
+                      <Text style={styles.recBtnText}>⏹ Stop</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
 
+            {/* Error */}
+            {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
+
             {/* Title */}
-            <Text style={styles.label}>Titre *</Text>
+            <Text style={styles.label}>Titre <Text style={styles.req}>*</Text></Text>
             <TextInput
               style={styles.input}
-              placeholder="Résumé du problème"
+              placeholder="Ex. : crash sur l'écran d'accueil"
               placeholderTextColor="#aaa"
               value={title}
               onChangeText={setTitle}
-              maxLength={255}
               editable={!loading}
               returnKeyType="next"
+              maxLength={255}
             />
 
             {/* Description */}
-            <Text style={styles.label}>Description *</Text>
+            <Text style={styles.label}>Description <Text style={styles.req}>*</Text></Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Décrivez le problème en détail..."
+              placeholder="Décrivez les étapes pour reproduire le problème…"
               placeholderTextColor="#aaa"
               value={description}
               onChangeText={setDescription}
               multiline
               numberOfLines={5}
               editable={!loading}
-              textAlignVertical="top"
             />
 
-            {/* Error */}
-            {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={styles.footer}>
+            {/* Submit */}
             <TouchableOpacity
-              style={[styles.btn, styles.cancelBtn]}
-              onPress={onClose}
-              disabled={loading}
-            >
-              <Text style={styles.cancelBtnText}>Annuler</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.btn, styles.submitBtn, loading && styles.btnDisabled]}
+              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
               onPress={handleSubmit}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.submitBtnText}>Envoyer</Text>
-              )}
+              {loading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.submitBtnText}>Envoyer le ticket</Text>
+              }
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 };
 
+const INDIGO = '#5E5CE6';
+const RED    = '#E53935';
+const GREEN  = '#22A06B';
+
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '92%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    maxHeight: '92%', paddingBottom: 24,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', paddingTop: 12, paddingHorizontal: 16,
+    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
   },
-  grip: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)', marginBottom: 10,
-  },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
-  closeBtn: { position: 'absolute', right: 20, top: 20, padding: 4 },
-  closeBtnText: { fontSize: 18, color: 'rgba(255,255,255,0.5)' },
-  body: { padding: 20, paddingBottom: 4 },
+  grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 8 },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e' },
+  closeBtn: { position: 'absolute', right: 16, top: 12, padding: 6 },
+  closeBtnText: { fontSize: 18, color: '#888' },
 
-  // Screenshot + annotation
-  screenshotRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-    alignItems: 'flex-start',
-  },
+  body: { padding: 20, gap: 14 },
+
+  // Screenshot
+  screenshotRow: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 4 },
   screenshotBox: { flex: 1, position: 'relative' },
-  screenshot: {
-    width: '100%', height: 140, borderRadius: 10,
-    backgroundColor: '#0d0d1a',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
+  screenshot: { width: '100%', height: 140, borderRadius: 12, backgroundColor: '#f5f5f5' },
   annotatedBadge: {
-    position: 'absolute', top: 6, left: 6,
-    backgroundColor: 'rgba(108,99,255,0.85)',
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: 'rgba(94,92,230,0.9)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
-  annotatedBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  annotatedBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   annotateBtn: {
-    backgroundColor: 'rgba(108,99,255,0.2)',
-    borderWidth: 1, borderColor: '#6c63ff',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
     alignItems: 'center', justifyContent: 'center', gap: 4,
+    backgroundColor: INDIGO + '18', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
   },
-  annotateBtnIcon: { fontSize: 20 },
-  annotateBtnText: { color: '#6c63ff', fontSize: 12, fontWeight: '600' },
+  annotateBtnIcon: { fontSize: 22 },
+  annotateBtnText: { fontSize: 11, fontWeight: '700', color: INDIGO },
 
   // Recorder
-  recorderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  recorderRow: { gap: 10 },
+  recorderInfo: { gap: 4 },
+  recorderLabel: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  recorderSub: { fontSize: 12, color: '#9ca3af' },
+
+  recBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(229,57,53,0.08)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginTop: 4,
   },
-  recorderInfo: { flex: 1 },
-  recorderLabel: { color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: 14 },
-  recorderFrames: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
-  recorderBtn: {
-    backgroundColor: 'rgba(255,59,48,0.15)',
-    borderWidth: 1.5, borderColor: '#FF3B30',
-    borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7,
+  recBadgeDone: { backgroundColor: 'rgba(34,160,107,0.1)' },
+  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: RED },
+  recDotPaused: { backgroundColor: '#BDBDBD' },
+  recTimer: { fontSize: 14, fontWeight: '800', color: '#1a1a2e', letterSpacing: 0.5 },
+  recMode: { fontSize: 12, color: '#6b7280' },
+  recDoneText: { fontSize: 13, fontWeight: '700', color: GREEN },
+
+  recButtons: { flexDirection: 'row', gap: 8 },
+  recBtn: {
+    flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center',
   },
-  recorderBtnActive: {
-    backgroundColor: 'rgba(255,59,48,0.3)',
-  },
-  recorderBtnText: { color: '#FF3B30', fontWeight: '700', fontSize: 13 },
+  recBtnStart: { backgroundColor: RED },
+  recBtnPause: { backgroundColor: '#2684FF' },
+  recBtnStop:  { backgroundColor: '#1E2330' },
+  recBtnText:  { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Form fields
-  label: {
-    fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)',
-    marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase',
-  },
+  label: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: -8 },
+  req:   { color: RED },
   input: {
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 10, padding: 12, marginBottom: 16,
-    fontSize: 15, color: '#fff', backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 15, color: '#1a1a2e', backgroundColor: '#fafafa',
   },
-  textArea: { minHeight: 100 },
-  errorText: { color: '#ff6b6b', fontSize: 13, marginBottom: 8 },
+  textArea: { height: 110, textAlignVertical: 'top' },
 
-  // Footer
-  footer: {
-    flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, gap: 12,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  btn: {
-    flex: 1, borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  cancelBtn: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  cancelBtnText: { color: 'rgba(255,255,255,0.7)', fontWeight: '600', fontSize: 15 },
+  errorText: { fontSize: 13, color: RED, fontWeight: '600' },
+
+  // Submit
   submitBtn: {
-    backgroundColor: '#6c63ff',
-    shadowColor: '#6c63ff', shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 6,
+    backgroundColor: INDIGO, borderRadius: 14,
+    paddingVertical: 15, alignItems: 'center', marginTop: 8,
   },
-  submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  btnDisabled: { opacity: 0.6 },
+  submitBtnDisabled: { opacity: 0.55 },
+  submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });
