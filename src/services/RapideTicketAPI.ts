@@ -25,6 +25,8 @@ export class RapideTicketAPI {
       description: string;
       screenshotUri?: string | null;
       gifUri?: string | null;
+      /** MP4 from native screen recorder — takes priority over frames */
+      videoUri?: string | null;
       recordingFrames?: string[];
     },
     config: RapideTicketConfig,
@@ -61,8 +63,14 @@ export class RapideTicketAPI {
       } as any);
     }
 
-    // Attach screen recording frames (PNG screenshots captured by useGifRecorder)
-    if (params.recordingFrames && params.recordingFrames.length > 0) {
+    // Screen recording — MP4 (native) takes priority over PNG frames
+    if (params.videoUri) {
+      form.append('files', {
+        uri: params.videoUri,
+        name: 'rapide_ticket_screen_recording.mp4',
+        type: 'video/mp4',
+      } as any);
+    } else if (params.recordingFrames && params.recordingFrames.length > 0) {
       params.recordingFrames.forEach((frameUri, i) => {
         form.append('files', {
           uri: frameUri,

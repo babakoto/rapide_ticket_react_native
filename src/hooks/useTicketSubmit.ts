@@ -9,7 +9,9 @@ export interface SubmitParams {
   description: string;
   screenshotUri?: string | null;
   gifUri?: string | null;
-  /** PNG frames captured by useGifRecorder (attached as screen_recording_N.png) */
+  /** MP4 file URI from native screen recorder — takes priority over frames */
+  videoUri?: string | null;
+  /** PNG frames captured by useGifRecorder / useScreenRecorder fallback */
   recordingFrames?: string[];
 }
 
@@ -48,7 +50,7 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
       let result: IssueCreateResult;
       try {
         result = await api.submitIssue(
-          { ...params, recordingFrames: params.recordingFrames },
+          { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames },
           config,
           token,
         );
@@ -62,7 +64,7 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
           try {
             token = await AuthService.refreshAccessToken(config.apiBaseUrl);
             result = await api.submitIssue(
-              { ...params, recordingFrames: params.recordingFrames },
+              { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames },
               config,
               token,
             );
@@ -95,7 +97,10 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
           priority: 'medium',
           type: 'bug',
           metadata: { screenshotUri: params.screenshotUri },
-          attachments: params.screenshotUri ? [params.screenshotUri] : [],
+          attachments: [
+            ...(params.screenshotUri ? [params.screenshotUri] : []),
+            ...(params.videoUri     ? [params.videoUri]     : []),
+          ],
         });
       } catch (queueErr) {
         console.error('[RapideTicket] Offline queue failed:', queueErr);

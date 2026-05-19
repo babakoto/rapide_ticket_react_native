@@ -20,7 +20,8 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-record-screen": "*"
   },
   "devDependencies": {
     "typescript": "^5.x",
