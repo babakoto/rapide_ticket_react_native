@@ -1,265 +1,236 @@
 /**
  * Rapide Ticket API Client — React Native
  *
- * Implements every endpoint consumed by the Flutter SDK:
+ * Full parity with the Flutter SDK endpoints:
  *
  * AUTH
- *   POST /api/v1/auth/login                   — email/password → JWT + refresh token
- *   POST /api/v1/auth/refresh                  — refresh access token
- *   POST /api/v1/auth/oauth/atlassian/url      — get Atlassian OAuth URL
- *   POST /api/v1/auth/oauth/atlassian/exchange — exchange code → JWT
+ *   POST /api/v1/auth/login                              — email/password → JWT + refresh
+ *   POST /api/v1/auth/refresh                            — renew access token
+ *   GET  /api/v1/auth/oauth/atlassian/authorization-url — start Atlassian OAuth
+ *   POST /api/v1/auth/oauth/atlassian/exchange           — exchange code → JWT
  *
  * ISSUES
- *   POST /api/v1/projects/:projectId/issues   — create issue (multipart, screenshot/gif)
+ *   POST /api/v1/projects/:id/issues                     — create issue (multipart)
  *
  * JIRA
- *   GET  /api/v1/projects/:projectId/jira/assignable-users — search Jira assignees
+ *   GET  /api/v1/projects/:id/jira/assignable-users      — search Jira assignees
  *
  * PROJECT
- *   GET  /api/v1/projects/:projectId/members  — list project members (RapideTicket users)
+ *   GET  /api/v1/projects/:id/members                    — list RT project members
+ *
+ * See also: AuthService (token storage) and types/index.ts (shared models).
  */
 
 import { AuthService } from './AuthService';
+import {
+  IssueCreateResult,
+  JiraAssignableUser,
+  ProjectMember,
+  TicketAssignablePerson,
+  AtlassianOAuthLoginStart,
+  CreateIssueParams,
+  IssueSyncStatus,
+  assignablePersonFromJira,
+  assignablePersonFromMember,
+  getIssueSummary,
+} from '../types';
 
-// ─── Models ────────────────────────────────────────────────────────────────
+export type { IssueCreateResult, JiraAssignableUser, ProjectMember, TicketAssignablePerson,
+             AtlassianOAuthLoginStart, CreateIssueParams, IssueSyncStatus };
+export { assignablePersonFromJira, assignablePersonFromMember, getIssueSummary };
 
-export type IssueSyncStatus =
-  | 'OPEN'
-  | 'SYNCED_TO_JIRA'
-  | 'SYNCED_TO_GITHUB'
-  | 'JIRA_ERROR'
-  | 'GITHUB_ERROR'
-  | string;
+// ─── Internal helpers ────────────────────────────────────────────────────────
 
-export interface IssueCreateResult {
-  id: string;
-  projectId: string;
-  title: string;
-  status: IssueSyncStatus;
-  jiraIssueKey?: string;
-  jiraIssueUrl?: string;
-  githubIssueNumber?: number;
-  githubIssueUrl?: string;
-  jiraAssigneeAccountId?: string;
-  errorMessage?: string;
-}
+const DEFAULT_BASE = 'https://api.flutteradgents.com';
 
-export interface JiraAssignableUser {
-  accountId: string;
-  displayName: string;
-  active: boolean;
-  emailAddress?: string;
-  avatarUrl?: string;
-}
-
-export interface ProjectMember {
-  userId: string;
-  email: string;
-  displayName: string;
-  role: string; // 'OWNER' | 'ADMIN' | 'MEMBER'
-}
-
-export interface CreateIssueParams {
-  title: string;
-  description: string;
-  environment?: string;
-  clientPlatform?: string;
-  priority?: string;
-  /** UUID of a RapideTicket project member (email/password flow) */
-  assigneeUserId?: string;
-  /** Jira accountId (Atlassian OAuth flow) */
-  jiraAssigneeAccountId?: string;
-  /** Screenshot file URI (PNG / JPG / GIF) */
-  screenshotUri?: string | null;
-  /** Additional screen recording frames (PNG URIs) */
-  recordingFrames?: string[];
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Human-friendly summary matching Flutter's IssueCreateResult.userFacingSummary */
-export function getIssueSummary(result: IssueCreateResult): string {
-  const gh = result.githubIssueUrl ?? (result.githubIssueNumber != null ? `#${result.githubIssueNumber}` : null);
-  switch (result.status) {
-    case 'SYNCED_TO_JIRA': {
-      const parts: string[] = [];
-      if (result.jiraIssueKey) parts.push(`Jira: ${result.jiraIssueKey}`);
-      if (gh) parts.push(`GitHub: ${gh}`);
-      return parts.length > 0 ? parts.join(' · ') : 'Synced with Jira.';
-    }
-    case 'SYNCED_TO_GITHUB':
-      return gh ? `GitHub issue: ${gh}` : 'Synced with GitHub.';
-    case 'JIRA_ERROR':
-      return result.errorMessage ? `Jira: failed — ${result.errorMessage}` : 'Jira: failed.';
-    case 'GITHUB_ERROR':
-      return result.errorMessage ? `GitHub: failed — ${result.errorMessage}` : 'GitHub: failed.';
-    case 'OPEN':
-      return 'Issue saved (no external tracker configured).';
-    default:
-      return 'Issue saved.';
-  }
-}
-
-/** Wraps a fetch Response error into a typed Error with statusCode */
-async function handleResponse<T>(res: Response): Promise<T> {
+/** Reads JSON body on success, throws typed Error on failure (mirrors DioException._wrap) */
+async function _unwrap<T>(res: Response): Promise<T> {
   if (res.ok) return res.json() as Promise<T>;
   let message = `Server returned HTTP ${res.status}`;
   try {
     const body = await res.json();
-    if (body?.message) message = body.message;
-  } catch (_) { /* ignore parse errors */ }
+    if (typeof body?.message === 'string') message = body.message;
+  } catch (_) { /* ignore */ }
   const err: any = new Error(message);
   err.statusCode = res.status;
   throw err;
 }
 
-const DEFAULT_BASE_URL = 'https://api.flutteradgents.com';
+function _cleanBase(url = DEFAULT_BASE) {
+  return url.replace(/\/+$/, '');
+}
 
-// ─── API Client ─────────────────────────────────────────────────────────────
+// ─── API Client ──────────────────────────────────────────────────────────────
 
 export class RapideTicketAPIClient {
-  private readonly baseUrl: string;
+  private readonly base: string;
   private readonly projectId: string;
 
-  constructor(projectId: string, baseUrl: string = DEFAULT_BASE_URL) {
+  constructor(projectId: string, baseUrl?: string) {
     this.projectId = projectId;
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.base = _cleanBase(baseUrl);
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // AUTH
-  // ────────────────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+  // AUTH — mirrors rapide_ticket_session.dart
+  // ════════════════════════════════════════════════════════════════════════
 
   /**
    * POST /api/v1/auth/login
-   * Returns { accessToken, refreshToken } — stored via AuthService.
+   * Stores the returned tokens via AuthService.
+   * Mirrors: RapideTicketSession.signIn()
    */
-  async login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+  async signIn(email: string, password: string): Promise<void> {
+    const res = await fetch(`${this.base}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: email.trim(), password }),
     });
-    const data = await handleResponse<{ accessToken: string; refreshToken: string }>(res);
-    await AuthService.storeTokens(data.accessToken, data.refreshToken);
-    return data;
+    const data = await _unwrap<{ token: string; refreshToken?: string; jiraAccountId?: string }>(res);
+    if (typeof data.token !== 'string') throw new Error('Invalid auth response');
+    await AuthService.storeTokens(data.token, data.refreshToken);
   }
 
   /**
    * POST /api/v1/auth/refresh
-   * Uses the stored refresh token. Updates stored access token on success.
+   * Renews the JWT using the persisted refresh token.
+   * Mirrors: RapideTicketSession.refreshAccessToken()
    */
   async refreshAccessToken(): Promise<string> {
-    const refreshToken = await AuthService.getRefreshToken();
-    if (!refreshToken) throw new Error('No refresh token stored');
-    const res = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+    const rt = await AuthService.getRefreshToken();
+    if (!rt) throw new Error('Session expired — sign in again.');
+
+    const res = await fetch(`${this.base}/api/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({ refreshToken: rt }),
     });
-    const data = await handleResponse<{ accessToken: string; refreshToken?: string }>(res);
-    await AuthService.storeTokens(
-      data.accessToken,
-      data.refreshToken ?? refreshToken,
-    );
-    return data.accessToken;
+    const data = await _unwrap<{ token: string; refreshToken?: string }>(res);
+    await AuthService.storeTokens(data.token, data.refreshToken ?? rt);
+    return data.token;
   }
 
   /**
-   * POST /api/v1/auth/oauth/atlassian/url
-   * Returns { authorizationUrl, configured }.
-   * On mobile, open authorizationUrl in browser; handle the deep-link callback
-   * via the exchange() method below.
+   * GET /api/v1/auth/oauth/atlassian/authorization-url
+   * Returns the Atlassian OAuth URL to open in the browser.
+   * Mirrors: RapideTicketSession.getAtlassianLoginAuthorizationUrl()
    */
   async getAtlassianAuthorizationUrl(opts: {
     inviteToken?: string;
-    oauthLoginReturnUri?: string;
-    mobileOauthScheme?: string;
-  }): Promise<{ authorizationUrl: string; configured: boolean }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/auth/oauth/atlassian/url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: this.projectId,
-        inviteToken: opts.inviteToken,
-        returnUri: opts.oauthLoginReturnUri,
-        mobileScheme: opts.mobileOauthScheme,
-      }),
-    });
-    return handleResponse<{ authorizationUrl: string; configured: boolean }>(res);
+    returnUri?: string;
+    mobileScheme?: string;
+  } = {}): Promise<AtlassianOAuthLoginStart> {
+    const q = new URLSearchParams({ projectId: this.projectId });
+    if (opts.inviteToken?.trim()) q.set('inviteToken', opts.inviteToken.trim());
+    if (opts.returnUri?.trim())   q.set('returnUri',   opts.returnUri.trim());
+    if (opts.mobileScheme?.trim()) q.set('mobileScheme', opts.mobileScheme.trim());
+
+    const res = await fetch(`${this.base}/api/v1/auth/oauth/atlassian/authorization-url?${q}`);
+    if (!res.ok) return { configured: false };
+
+    const data: any = await res.json();
+    const url = data?.authorizationUrl;
+    return {
+      authorizationUrl: typeof url === 'string' && url ? url : undefined,
+      configured: data?.configured === true,
+    };
   }
 
   /**
    * POST /api/v1/auth/oauth/atlassian/exchange
-   * Exchange the OAuth code received from the deep link for a JWT.
+   * Exchange the OAuth code (from deep-link / redirect) for a JWT.
+   * Mirrors: RapideTicketSession.signInWithOAuthExchangeCode()
    */
-  async exchangeAtlassianCode(
-    code: string,
-    inviteToken?: string,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/auth/oauth/atlassian/exchange`, {
+  async signInWithOAuthCode(code: string, inviteToken?: string): Promise<void> {
+    const res = await fetch(`${this.base}/api/v1/auth/oauth/atlassian/exchange`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, inviteToken, projectId: this.projectId }),
+      body: JSON.stringify({
+        code: code.trim(),
+        ...(inviteToken ? { inviteToken } : {}),
+        projectId: this.projectId,
+      }),
     });
-    const data = await handleResponse<{ accessToken: string; refreshToken: string }>(res);
-    await AuthService.storeTokens(data.accessToken, data.refreshToken);
-    return data;
+    const data = await _unwrap<{ token: string; refreshToken?: string }>(res);
+    if (typeof data.token !== 'string') throw new Error('Empty OAuth response');
+    await AuthService.storeTokens(data.token, data.refreshToken);
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // ISSUES — POST /api/v1/projects/:projectId/issues (multipart)
-  // ────────────────────────────────────────────────────────────────────────
+  /** Sign out — clears stored tokens. Mirrors: RapideTicketSession.signOut() */
+  async signOut(): Promise<void> {
+    await AuthService.signOut();
+  }
+
+  /** True when a valid access token is stored in Keychain. */
+  async isSignedIn(): Promise<boolean> {
+    return AuthService.isSignedIn();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ISSUES — mirrors IssuesApi (issues_api.dart)
+  // ════════════════════════════════════════════════════════════════════════
 
   /**
-   * Creates an issue with optional screenshot / recording attachments.
-   * Matches Flutter IssuesApi.createFromUserFeedback().
-   * Automatically retries with a refreshed token on 401.
+   * POST /api/v1/projects/:projectId/issues  (multipart/form-data)
+   *
+   * Mirrors: IssuesApi.createFromUserFeedback()
+   *
+   * Field mapping vs Flutter:
+   *   title                 ← params.title (max 255 chars)
+   *   description           ← params.description (enriched with device metadata by caller)
+   *   environment           ← params.environment
+   *   clientPlatform        ← params.clientPlatform  (e.g. 'REACT_NATIVE')
+   *   priority              ← params.priority        (URGENT/IMPORTANT/NORMAL/LESS_URGENT)
+   *   assigneeUserId        ← params.assigneeUserId  (RT UUID, takes priority)
+   *   jiraAssigneeAccountId ← params.jiraAssigneeAccountId
+   *   files[]               ← screenshotUri + recordingFrames
+   *
+   * Automatically retries once with a refreshed token on 401 / 403.
    */
   async createIssue(params: CreateIssueParams): Promise<IssueCreateResult> {
     const token = await this._requireToken();
     try {
-      return await this._postIssue(params, token);
+      return await this._doCreateIssue(params, token);
     } catch (err: any) {
+      // Mirror RapideTicketAuthInterceptor: retry once on 401/403
       if (err?.statusCode === 401 || err?.statusCode === 403) {
         const newToken = await this.refreshAccessToken();
-        return this._postIssue(params, newToken);
+        return this._doCreateIssue(params, newToken);
       }
       throw err;
     }
   }
 
-  private async _postIssue(params: CreateIssueParams, token: string): Promise<IssueCreateResult> {
+  private async _doCreateIssue(params: CreateIssueParams, token: string): Promise<IssueCreateResult> {
     const form = new FormData();
 
-    form.append('title', params.title);
+    // Title — truncate to 255 chars (kIssueTitleMaxLength)
+    form.append('title', params.title.trim().substring(0, 255));
     form.append('description', params.description);
 
-    if (params.environment) form.append('environment', params.environment);
+    if (params.environment)  form.append('environment',  params.environment);
     if (params.clientPlatform) form.append('clientPlatform', params.clientPlatform);
-    if (params.priority) form.append('priority', params.priority);
+    if (params.priority)     form.append('priority', params.priority);
 
-    // Assignee: RapideTicket userId (email/password) takes priority over Jira accountId
-    if (params.assigneeUserId) {
-      form.append('assigneeUserId', params.assigneeUserId);
-    } else if (params.jiraAssigneeAccountId) {
-      form.append('jiraAssigneeAccountId', params.jiraAssigneeAccountId);
+    // Assignee priority: RapideTicket userId > Jira accountId
+    if (params.assigneeUserId?.trim()) {
+      form.append('assigneeUserId', params.assigneeUserId.trim());
+    } else if (params.jiraAssigneeAccountId?.trim()) {
+      form.append('jiraAssigneeAccountId', params.jiraAssigneeAccountId.trim());
     }
 
-    // Screenshot (PNG / JPG / GIF)
+    // Screenshot — PNG / JPG / GIF
     if (params.screenshotUri) {
-      const isGif = params.screenshotUri.toLowerCase().endsWith('.gif');
-      const isJpg = params.screenshotUri.toLowerCase().match(/\.(jpg|jpeg)$/);
+      const uri = params.screenshotUri;
+      const lc  = uri.toLowerCase();
+      const isGif = lc.endsWith('.gif');
+      const isJpg = lc.match(/\.(jpg|jpeg)$/);
       const ext  = isGif ? 'gif' : isJpg ? 'jpg' : 'png';
       const mime = `image/${isGif ? 'gif' : isJpg ? 'jpeg' : 'png'}`;
-      form.append('files', {
-        uri: params.screenshotUri,
-        name: `rapide_ticket_feedback.${ext}`,
-        type: mime,
-      } as any);
+      form.append('files', { uri, name: `rapide_ticket_feedback.${ext}`, type: mime } as any);
     }
 
-    // Screen recording frames (PNG)
+    // Screen recording frames — mirrors additionalGifRecordings loop
     if (params.recordingFrames?.length) {
       params.recordingFrames.forEach((uri, i) => {
         form.append('files', {
@@ -270,7 +241,7 @@ export class RapideTicketAPIClient {
       });
     }
 
-    const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/issues`;
+    const url = `${this.base}/api/v1/projects/${this.projectId}/issues`;
     console.debug(`[RapideTicket] POST ${url}`);
 
     const res = await fetch(url, {
@@ -278,64 +249,72 @@ export class RapideTicketAPIClient {
       headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
-
-    return handleResponse<IssueCreateResult>(res);
+    return _unwrap<IssueCreateResult>(res);
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // JIRA — GET /api/v1/projects/:projectId/jira/assignable-users
-  // ────────────────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+  // JIRA — mirrors JiraAssignableUsersApi (jira_assignable_users_api.dart)
+  // ════════════════════════════════════════════════════════════════════════
 
   /**
-   * Search Jira assignable users (proxied by the backend).
-   * Matches Flutter JiraAssignableUsersApi.listAssignableUsers().
+   * GET /api/v1/projects/:projectId/jira/assignable-users
+   *
+   * Mirrors: JiraAssignableUsersApi.listAssignableUsers()
+   * Used when signInMethod === 'atlassianOAuth' to populate the assignee picker.
+   *
+   * @param query      Optional Jira text filter
+   * @param maxResults 1–100, default 50
    */
   async listJiraAssignableUsers(opts: {
     query?: string;
     maxResults?: number;
   } = {}): Promise<JiraAssignableUser[]> {
     const token = await this._requireToken();
-    const params = new URLSearchParams({ maxResults: String(opts.maxResults ?? 50) });
-    if (opts.query) params.set('query', opts.query);
+    const q = new URLSearchParams({ maxResults: String(opts.maxResults ?? 50) });
+    if (opts.query?.trim()) q.set('query', opts.query.trim());
 
-    const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/jira/assignable-users?${params}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const url = `${this.base}/api/v1/projects/${this.projectId}/jira/assignable-users?${q}`;
+    const res  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await _unwrap<any[]>(res);
 
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try { const b = await res.json(); if (b?.message) msg = b.message; } catch (_) {}
-      throw new Error(msg);
-    }
-    const data: any[] = await res.json();
-    return (data ?? []).map((u) => ({
-      accountId:    u.accountId as string,
-      displayName:  (u.displayName ?? u.accountId) as string,
-      active:       u.active ?? true,
-      emailAddress: u.emailAddress as string | undefined,
-      avatarUrl:    u.avatarUrl   as string | undefined,
-    }));
+    return (data ?? []).map((u): JiraAssignableUser => {
+      const av = typeof u.avatarUrl === 'string' && u.avatarUrl.trim() ? u.avatarUrl.trim() : undefined;
+      return {
+        accountId:    String(u.accountId),
+        displayName:  String(u.displayName ?? u.accountId),
+        active:       u.active !== false,
+        emailAddress: u.emailAddress ?? undefined,
+        avatarUrl:    av,
+      };
+    });
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // PROJECT MEMBERS — GET /api/v1/projects/:projectId/members
-  // ────────────────────────────────────────────────────────────────────────
+  /**
+   * Convenience: listJiraAssignableUsers() → TicketAssignablePerson[]
+   * Ready to feed directly into the assignee picker.
+   */
+  async listJiraAssignees(opts: { query?: string; maxResults?: number } = {}): Promise<TicketAssignablePerson[]> {
+    const users = await this.listJiraAssignableUsers(opts);
+    return users.map(assignablePersonFromJira);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PROJECT MEMBERS — mirrors ProjectMembersApi (project_members_api.dart)
+  // ════════════════════════════════════════════════════════════════════════
 
   /**
-   * List RapideTicket project members (used for assignee picker in email/password flow).
-   * Matches Flutter ProjectMembersApi.listMembers().
+   * GET /api/v1/projects/:projectId/members
+   *
+   * Mirrors: ProjectMembersApi.listMembers()
+   * Used when signInMethod === 'password' to populate the assignee picker.
    */
   async listProjectMembers(): Promise<ProjectMember[]> {
     const token = await this._requireToken();
-    const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/members`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const url   = `${this.base}/api/v1/projects/${this.projectId}/members`;
+    const res   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data  = await _unwrap<any[]>(res);
 
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try { const b = await res.json(); if (b?.message) msg = b.message; } catch (_) {}
-      throw new Error(msg);
-    }
-    const data: any[] = await res.json();
-    return (data ?? []).map((m) => ({
+    return (data ?? []).map((m): ProjectMember => ({
       userId:      String(m.userId   ?? ''),
       email:       String(m.email    ?? ''),
       displayName: String(m.displayName ?? ''),
@@ -343,13 +322,39 @@ export class RapideTicketAPIClient {
     }));
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Internal helpers
-  // ────────────────────────────────────────────────────────────────────────
+  /**
+   * Convenience: listProjectMembers() → TicketAssignablePerson[]
+   * Ready to feed directly into the assignee picker.
+   */
+  async listProjectAssignees(): Promise<TicketAssignablePerson[]> {
+    const members = await this.listProjectMembers();
+    return members.map(assignablePersonFromMember);
+  }
+
+  /**
+   * Returns the appropriate assignee list based on the current sign-in method.
+   * Mirrors the conditional in the Flutter feedback form widget.
+   */
+  async listAssigneesForCurrentSession(
+    signInMethod: import('../types').SignInMethod,
+    jiraOpts: { query?: string; maxResults?: number } = {},
+  ): Promise<TicketAssignablePerson[]> {
+    if (signInMethod === 'atlassianOAuth') {
+      return this.listJiraAssignees(jiraOpts);
+    }
+    if (signInMethod === 'password') {
+      return this.listProjectAssignees();
+    }
+    return [];
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Internals
+  // ════════════════════════════════════════════════════════════════════════
 
   private async _requireToken(): Promise<string> {
-    const token = await AuthService.getToken();
-    if (!token) throw new Error('Not authenticated — please sign in first.');
-    return token;
+    const t = await AuthService.getToken();
+    if (!t) throw new Error('Not authenticated — please sign in first.');
+    return t;
   }
 }
