@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { RapideTicketConfig } from '../types';
 import { SecretTriggerLayer } from './SecretTriggerLayer';
 import { RapideTicketModal } from './RapideTicketModal';
 import { SignInScreen } from './SignInScreen';
 import { AuthService } from '../services/AuthService';
 import { captureScreen } from 'react-native-view-shot';
+import { useOAuthDeepLink } from '../hooks/useOAuthDeepLink';
+import { RapideTicketAPIClient } from '../services/RapideTicketAPIClient';
 
 interface RapideTicketContextValue {
   config: RapideTicketConfig;
@@ -27,7 +29,8 @@ interface Props {
 
 // Global ref for imperative API (RapideTicket.open())
 export const _rapideTicketRef = {
-  openPanel: () => {},
+  openPanel: (opts?: { inviteToken?: string }) => {},
+  openWithEditedCapture: (uri: string, opts?: { inviteToken?: string }) => {},
   isReady: false,
 };
 
@@ -36,25 +39,44 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const isCapturing = useRef(false);
+  const activeInviteToken = useRef<string | undefined>(undefined);
+
+  const apiClient = useMemo(() => new RapideTicketAPIClient(config.projectId, config.flavor), [config.projectId, config.flavor]);
+
+  useOAuthDeepLink(apiClient, {
+    onSuccess: () => {
+      console.log('[RapideTicket] OAuth Success');
+      handleSignInSuccess();
+    },
+    onError: (msg) => console.warn('[RapideTicket] OAuth Error:', msg),
+    inviteToken: activeInviteToken.current,
+  });
 
   useEffect(() => {
     _rapideTicketRef.isReady = true;
     _rapideTicketRef.openPanel = openWithCapture;
+    _rapideTicketRef.openWithEditedCapture = openWithEditedCapture;
     return () => { _rapideTicketRef.isReady = false; };
   }, []);
 
-  /**
-   * Full trigger flow (mirrors Flutter SDK):
-   * 1. Capture screenshot BEFORE any UI appears
-   * 2. Check authentication
-   *    - Not signed in → show SignInModal
-   *    - Signed in     → show FeedbackModal directly
-   */
-  const openWithCapture = async () => {
+  const handleOpenFlow = async (uri: string | null, opts?: { inviteToken?: string }) => {
+    if (opts?.inviteToken) {
+      activeInviteToken.current = opts.inviteToken;
+    }
+    setPreviewUri(uri);
+
+    const token = await AuthService.getToken();
+    if (!token) {
+      setSignInVisible(true);
+    } else {
+      setModalVisible(true);
+    }
+  };
+
+  const openWithCapture = async (opts?: { inviteToken?: string }) => {
     if (isCapturing.current || modalVisible || signInVisible) return;
     isCapturing.current = true;
 
-    // Step 1: Capture the screen in its current state
     let uri: string | null = null;
     try {
       uri = await captureScreen({ format: 'png', quality: 0.8 });
@@ -64,15 +86,12 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
       isCapturing.current = false;
     }
 
-    setPreviewUri(uri);
+    handleOpenFlow(uri, opts);
+  };
 
-    // Step 2: Check auth — show sign-in or feedback
-    const token = await AuthService.getToken();
-    if (!token) {
-      setSignInVisible(true);
-    } else {
-      setModalVisible(true);
-    }
+  const openWithEditedCapture = async (uri: string, opts?: { inviteToken?: string }) => {
+    if (modalVisible || signInVisible) return;
+    handleOpenFlow(uri, opts);
   };
 
   /** Called when sign-in succeeds → move to feedback modal */
@@ -85,6 +104,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
     setSignInVisible(false);
     setModalVisible(false);
     setPreviewUri(null);
+    activeInviteToken.current = undefined;
   };
 
   return (
@@ -101,6 +121,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
         config={config}
         onSuccess={handleSignInSuccess}
         onClose={closeAll}
+        inviteToken={activeInviteToken.current}
       />
 
       {/* Bug report form — shown only after authentication */}
@@ -108,6 +129,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
         visible={modalVisible}
         onClose={closeAll}
         previewUri={previewUri}
+        inviteToken={activeInviteToken.current}
       />
     </RapideTicketContext.Provider>
   );

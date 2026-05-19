@@ -35,14 +35,15 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   previewUri?: string | null;
+  inviteToken?: string;
 }
 
 type Screen = 'form' | 'annotate';
 
-export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUri }) => {
+export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUri, inviteToken }) => {
   const { config } = useRapideTicket();
   const { setImageUri } = useScreenCapture();
-  const { submit, loading, error } = useTicketSubmit(config);
+  const { submit, loading, error } = useTicketSubmit(config, inviteToken);
 
   // Screen recorder (native MP4 + fallback frames)
   const recorder = useScreenRecorder({

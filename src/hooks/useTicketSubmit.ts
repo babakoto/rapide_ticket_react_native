@@ -13,6 +13,8 @@ export interface SubmitParams {
   videoUri?: string | null;
   /** PNG frames captured by useGifRecorder / useScreenRecorder fallback */
   recordingFrames?: string[];
+  /** Optional invite token forwarded to the issue creation endpoint */
+  inviteToken?: string;
 }
 
 export interface UseTicketSubmitResult {
@@ -29,7 +31,7 @@ export interface UseTicketSubmitResult {
  * - Falls back to OfflineQueue on network failure.
  * - Attempts token refresh on 401.
  */
-export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResult => {
+export const useTicketSubmit = (config: RapideTicketConfig, inviteToken?: string): UseTicketSubmitResult => {
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<IssueCreateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
       let result: IssueCreateResult;
       try {
         result = await api.submitIssue(
-          { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames },
+          { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames, inviteToken },
           config,
           token,
         );
@@ -64,7 +66,7 @@ export const useTicketSubmit = (config: RapideTicketConfig): UseTicketSubmitResu
           try {
             token = await AuthService.refreshAccessToken(config.apiBaseUrl);
             result = await api.submitIssue(
-              { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames },
+              { ...params, videoUri: params.videoUri, recordingFrames: params.recordingFrames, inviteToken },
               config,
               token,
             );

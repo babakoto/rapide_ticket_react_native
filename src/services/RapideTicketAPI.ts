@@ -28,6 +28,7 @@ export class RapideTicketAPI {
       /** MP4 from native screen recorder — takes priority over frames */
       videoUri?: string | null;
       recordingFrames?: string[];
+      inviteToken?: string;
     },
     config: RapideTicketConfig,
     token: string,
@@ -46,6 +47,9 @@ export class RapideTicketAPI {
     form.append('description', enrichedDescription);
     form.append('environment', environment);
     form.append('clientPlatform', platform);
+    if (params.inviteToken) {
+      form.append('inviteToken', params.inviteToken);
+    }
 
     if (params.screenshotUri) {
       form.append('files', {

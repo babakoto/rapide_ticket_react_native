@@ -83,6 +83,19 @@ export const RapideTicket = {
       console.warn('[RapideTicket] Provider not mounted — wrap your app with <RapideTicketProvider>.');
     }
   },
+  
+  /**
+   * Open the feedback panel with a pre-edited capture URI.
+   * Mirrors Flutter: RapideTicket.showFeedbackWithEditedCapture(context, uri)
+   */
+  openWithEditedCapture: (uri: string, opts?: { inviteToken?: string }) => {
+    if (_rapideTicketRef.isReady) {
+      _rapideTicketRef.openWithEditedCapture(uri, opts);
+    } else {
+      console.warn('[RapideTicket] Provider not mounted.');
+    }
+  },
+
   isReady: () => _rapideTicketRef.isReady,
 
   /**
