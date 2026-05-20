@@ -199,7 +199,7 @@ export function useScreenRecorder(opts: {
           bitrate,
           ...(Platform.OS === 'ios' ? {} : {}),
         });
-        if (res?.status === 'recording' || res?.result === 'success' || res == null) {
+        if (res === 'started' || res?.status === 'recording' || res?.result === 'success' || res == null) {
           usingNative.current = true;
           setState('recording');
           _startTimer();

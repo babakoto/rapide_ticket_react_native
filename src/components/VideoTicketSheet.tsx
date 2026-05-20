@@ -146,12 +146,12 @@ export const VideoTicketSheet: React.FC<Props> = ({
           <View style={[styles.sheet, styles.previewSheet]}>
             <View style={styles.grip} />
             <Text style={styles.previewTitle}>
-              {hasVideo ? '🎬 Enregistrement prêt' : `🖼 ${frames.length} frames capturées`}
+              {hasVideo ? '🎬 Enregistrement prêt' : '🖼 Capture d\'écran prête'}
             </Text>
             <Text style={styles.previewSub}>
               {hasVideo
                 ? 'Vidéo MP4 — prête à joindre au ticket'
-                : 'Frames PNG — envoyées au serveur individuellemment'
+                : 'Capture d\'écran de fin d\'enregistrement (Fallback Simulateur)'
               }
             </Text>
 
@@ -219,7 +219,7 @@ export const VideoTicketSheet: React.FC<Props> = ({
             <View style={styles.recordingBadge}>
               <Text style={styles.recordingBadgeIcon}>{hasVideo ? '🎬' : '🖼'}</Text>
               <Text style={styles.recordingBadgeText}>
-                {hasVideo ? 'Vidéo MP4 jointe' : `${frames.length} frames jointes`}
+                {hasVideo ? 'Vidéo MP4 jointe' : 'Capture d\'écran de fin d\'enregistrement jointe'}
               </Text>
             </View>
 

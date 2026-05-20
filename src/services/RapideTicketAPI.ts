@@ -85,13 +85,14 @@ export class RapideTicketAPI {
         type: 'video/mp4',
       } as any);
     } else if (params.recordingFrames && params.recordingFrames.length > 0) {
-      params.recordingFrames.forEach((frameUri, i) => {
-        form.append('files', {
-          uri: frameUri,
-          name: `rapide_ticket_screen_recording_${i}.png`,
-          type: 'image/png',
-        } as any);
-      });
+      // Do NOT append all frames as separate files to prevent JIRA/Github attachment spam.
+      // Instead, send the last captured frame as a fallback screenshot representing the recording.
+      const lastFrame = params.recordingFrames[params.recordingFrames.length - 1];
+      form.append('files', {
+        uri: lastFrame,
+        name: 'rapide_ticket_screen_recording_fallback.png',
+        type: 'image/png',
+      } as any);
     }
 
     const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/issues`;

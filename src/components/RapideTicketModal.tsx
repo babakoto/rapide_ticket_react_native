@@ -283,7 +283,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
           <Text style={styles.recTimer}>{recorder.timerLabel}</Text>
           {recorder.isNative
             ? <Text style={styles.recMode}>📹 MP4</Text>
-            : <Text style={styles.recMode}>🖼 {recorder.frameCount} frames</Text>
+            : <Text style={styles.recMode}>🖼 Capture d'écran (Fallback)</Text>
           }
         </View>
       );
@@ -294,7 +294,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
           <Text style={styles.recDoneText}>
             {recordResult.videoUri
               ? '✅ Vidéo MP4 prête'
-              : `✅ ${recordResult.frames.length} frames capturées`
+              : '✅ Capture d\'écran de fin prête'
             }
           </Text>
         </View>
@@ -358,7 +358,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
                   <Text style={styles.recorderSub}>
                     {recorder.canUseNative
                       ? 'Capture native (vidéo MP4 — WebViews inclus)'
-                      : 'Capture par frames PNG'
+                      : 'Capture d\'écran de fin (Fallback Simulateur)'
                     }
                   </Text>
                   {recordingBadge}
