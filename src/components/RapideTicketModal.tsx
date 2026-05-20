@@ -24,6 +24,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   FlatList,
+  Animated,
 } from 'react-native';
 import { useTicketSubmit }    from '../hooks/useTicketSubmit';
 import { useScreenRecorder }  from '../hooks/useScreenRecorder';
@@ -89,6 +90,30 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   const [selectedAssignee, setSelectedAssignee] = useState<TicketAssignablePerson | null>(null);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
 
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const isRecording = recorder.state === 'recording' || recorder.state === 'paused';
+    if (isRecording) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1.0,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [recorder.state]);
+
   const effectiveUri = annotatedUri || previewUri;
 
   // ── Reset on open/close ───────────────────────────────────────────────
@@ -137,7 +162,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
       '🎬 Enregistrement terminé',
       result.videoUri
         ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
-        : `${result.frames.length} frames PNG capturées.`,
+        : `Capture d'écran de fin d'enregistrement prête à joindre.`,
     );
   };
 
@@ -303,11 +328,40 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     return null;
   })();
 
+  // ── Floating Recording Widget ─────────────────────────────────────────
+  const floatingRecordingWidget = (() => {
+    const isRecording = recorder.state === 'recording' || recorder.state === 'paused';
+    if (!isRecording) return null;
+
+    return (
+      <View style={styles.floatingContainer}>
+        <View style={styles.floatingPill}>
+          <Animated.View style={[styles.floatingDot, { opacity: pulseAnim }]} />
+          <Text style={styles.floatingTimer}>
+            Enregistrement {recorder.timerLabel}
+          </Text>
+          <TouchableOpacity
+            style={styles.floatingStopBtn}
+            onPress={handleGifStop}
+            activeOpacity={0.7}
+          >
+            <View style={styles.floatingStopIcon} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  })();
+
   // ── Main form ─────────────────────────────────────────────────────────
   return (
     <>
       {assigneePickerModal}
-      <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <Modal
+        visible={visible && recorder.state !== 'recording' && recorder.state !== 'paused'}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+      >
         <KeyboardAvoidingView
           style={styles.overlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -481,6 +535,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      {floatingRecordingWidget}
     </>
   );
 };
@@ -631,4 +686,58 @@ const styles = StyleSheet.create({
   pickerItemNameSelected: { color: INDIGO },
   pickerItemEmail: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   pickerCheckmark: { fontSize: 18, color: INDIGO, fontWeight: '700' },
+
+  // Floating recording widget styles
+  floatingContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999999,
+  },
+  floatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(28, 28, 30, 0.95)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.44,
+    shadowRadius: 10.32,
+    elevation: 16,
+  },
+  floatingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
+    marginRight: 10,
+  },
+  floatingTimer: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  floatingStopBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingStopIcon: {
+    width: 10,
+    height: 10,
+    borderRadius: 1,
+    backgroundColor: '#FFF',
+  },
 });
