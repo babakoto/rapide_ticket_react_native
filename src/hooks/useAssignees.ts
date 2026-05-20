@@ -24,7 +24,9 @@ export const useAssignees = (
   const reloadToken = useRef(0);
 
   const load = async () => {
+    console.log('[RapideTicket DEBUG] useAssignees load() called. signInMethod =', signInMethod, 'config =', config);
     if (signInMethod === 'none') {
+      console.log('[RapideTicket DEBUG] useAssignees: signInMethod is none, returning empty');
       setAssignees([]);
       return;
     }
@@ -33,11 +35,14 @@ export const useAssignees = (
     const current = ++reloadToken.current;
     try {
       const client = new RapideTicketAPIClient(config.projectId, config.apiBaseUrl);
+      console.log('[RapideTicket DEBUG] useAssignees calling listAssigneesForCurrentSession with', signInMethod);
       const list   = await client.listAssigneesForCurrentSession(signInMethod);
+      console.log('[RapideTicket DEBUG] useAssignees load success! Got', list.length, 'assignees:', list);
       if (reloadToken.current === current) {
         setAssignees(list);
       }
     } catch (e: any) {
+      console.error('[RapideTicket DEBUG] useAssignees load error:', e);
       if (reloadToken.current === current) {
         setError(e?.message ?? 'Failed to load assignees');
       }

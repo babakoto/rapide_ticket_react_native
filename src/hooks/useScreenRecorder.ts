@@ -242,8 +242,9 @@ export function useScreenRecorder(opts: {
       const recorder = getNativeRecorder();
       try {
         const res = await recorder.stopRecording();
-        // react-native-record-screen returns { status, result } or { outputURL }
-        const rawUri = res?.result ?? res?.outputURL ?? res?.url;
+        // react-native-record-screen returns { status: 'success', result: { outputURL } }
+        const rawUri = res?.result?.outputURL ?? (typeof res?.result === 'string' ? res.result : undefined) ?? res?.outputURL ?? res?.url;
+        console.log('[RapideTicket DEBUG] stopRecording response:', res, 'Parsed rawUri:', rawUri);
         if (typeof rawUri === 'string' && rawUri.length > 0) {
           videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
         }

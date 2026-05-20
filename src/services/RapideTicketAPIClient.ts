@@ -283,13 +283,15 @@ export class RapideTicketAPIClient {
     query?: string;
     maxResults?: number;
   } = {}): Promise<JiraAssignableUser[]> {
-    const token = await this._requireToken();
     const q = new URLSearchParams({ maxResults: String(opts.maxResults ?? 50) });
     if (opts.query?.trim()) q.set('query', opts.query.trim());
 
     const url = `${this.base}/api/v1/projects/${this.projectId}/jira/assignable-users?${q}`;
-    const res  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await _unwrap<any[]>(res);
+    
+    console.log('[RapideTicket DEBUG] listJiraAssignableUsers fetching URL:', url);
+    const data = await this._requestWithToken<any[]>((token) =>
+      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    );
 
     return (data ?? []).map((u): JiraAssignableUser => {
       const av = typeof u.avatarUrl === 'string' && u.avatarUrl.trim() ? u.avatarUrl.trim() : undefined;
@@ -323,10 +325,14 @@ export class RapideTicketAPIClient {
    * Used when signInMethod === 'password' to populate the assignee picker.
    */
   async listProjectMembers(): Promise<ProjectMember[]> {
-    const token = await this._requireToken();
     const url   = `${this.base}/api/v1/projects/${this.projectId}/members`;
-    const res   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const data  = await _unwrap<any[]>(res);
+    console.log('[RapideTicket DEBUG] listProjectMembers fetching URL:', url);
+    
+    const data = await this._requestWithToken<any[]>((token) => {
+      console.log('[RapideTicket DEBUG] listProjectMembers fetching with token...');
+      return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    });
+    console.log('[RapideTicket DEBUG] listProjectMembers raw data loaded successfully');
 
     return (data ?? []).map((m): ProjectMember => ({
       userId:      String(m.userId   ?? ''),
@@ -353,6 +359,7 @@ export class RapideTicketAPIClient {
     signInMethod: import('../types').SignInMethod,
     jiraOpts: { query?: string; maxResults?: number } = {},
   ): Promise<TicketAssignablePerson[]> {
+    console.log('[RapideTicket DEBUG] listAssigneesForCurrentSession called with signInMethod =', signInMethod);
     if (signInMethod === 'atlassianOAuth') {
       return this.listJiraAssignees(jiraOpts);
     }
@@ -365,6 +372,25 @@ export class RapideTicketAPIClient {
   // ════════════════════════════════════════════════════════════════════════
   // Internals
   // ════════════════════════════════════════════════════════════════════════
+
+  private async _requestWithToken<T>(
+    requestFn: (token: string) => Promise<Response>
+  ): Promise<T> {
+    const token = await this._requireToken();
+    try {
+      const res = await requestFn(token);
+      return await _unwrap<T>(res);
+    } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        console.log('[RapideTicket DEBUG] Token expired or invalid (401/403). Refreshing token...');
+        const newToken = await this.refreshAccessToken();
+        console.log('[RapideTicket DEBUG] Token refreshed successfully. Retrying request...');
+        const res = await requestFn(newToken);
+        return await _unwrap<T>(res);
+      }
+      throw err;
+    }
+  }
 
   private async _requireToken(): Promise<string> {
     const t = await AuthService.getToken();
