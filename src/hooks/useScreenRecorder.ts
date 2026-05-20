@@ -117,7 +117,8 @@ export function useScreenRecorder(opts: {
   const [elapsed, setElapsed] = useState(0);   // seconds
   const [frames,  setFrames]  = useState(0);   // frame count (fallback mode)
 
-  const canUseNative = useRef(preferNative && hasNativeRecorder() && !DeviceInfo.isEmulatorSync()).current;
+  const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
+  const canUseNative = useRef(preferNative && hasNativeRecorder() && !isIosSimulator).current;
   const usingNative  = useRef(false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
