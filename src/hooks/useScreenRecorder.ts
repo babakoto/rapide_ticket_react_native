@@ -27,6 +27,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Platform, NativeModules } from 'react-native';
 import { captureScreen } from 'react-native-view-shot';
 import RNFS from 'react-native-fs';
+import DeviceInfo from 'react-native-device-info';
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,7 +117,7 @@ export function useScreenRecorder(opts: {
   const [elapsed, setElapsed] = useState(0);   // seconds
   const [frames,  setFrames]  = useState(0);   // frame count (fallback mode)
 
-  const canUseNative = useRef(preferNative && hasNativeRecorder()).current;
+  const canUseNative = useRef(preferNative && hasNativeRecorder() && !DeviceInfo.isEmulatorSync()).current;
   const usingNative  = useRef(false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
