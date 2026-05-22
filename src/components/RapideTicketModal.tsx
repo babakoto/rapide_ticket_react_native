@@ -36,6 +36,21 @@ import { SecretFeedbackOverlay, DockMode } from './SecretFeedbackOverlay';
 import { getIssueSummary, TicketAssignablePerson, SignInMethod } from '../types';
 import { AuthService }        from '../services/AuthService';
 
+/**
+ * Android fix: transparent Modals + KeyboardAvoidingView cause the form
+ * to bounce up/down when focusing text fields. The system's adjustResize
+ * conflicts with KAV's keyboard event listener, triggering layout oscillation.
+ * On Android we use a plain View and let adjustResize handle keyboard avoidance.
+ */
+const FormOverlay: React.FC<{ style: any; children: React.ReactNode }> =
+  Platform.OS === 'ios'
+    ? ({ style, children }) => (
+        <KeyboardAvoidingView style={style} behavior="padding">
+          {children}
+        </KeyboardAvoidingView>
+      )
+    : ({ style, children }) => <View style={style}>{children}</View>;
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -225,79 +240,71 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     );
   }
 
-  // ── Assignee picker modal ─────────────────────────────────────────────
-  const assigneePickerModal = (
-    <Modal
-      visible={showAssigneePicker}
-      animationType="slide"
-      transparent
-      statusBarTranslucent
-      onRequestClose={() => setShowAssigneePicker(false)}
-    >
-      <View style={styles.pickerOverlay}>
-        <View style={styles.pickerSheet}>
-          <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>Assigner à</Text>
-            <TouchableOpacity onPress={() => setShowAssigneePicker(false)} style={styles.pickerCloseBtn}>
-              <Text style={styles.pickerCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          {assigneesLoading ? (
-            <View style={styles.pickerLoading}>
-              <ActivityIndicator color={INDIGO} />
-              <Text style={styles.pickerLoadingText}>Chargement…</Text>
-            </View>
-          ) : assignees.length === 0 ? (
-            <View style={styles.pickerEmpty}>
-              <Text style={styles.pickerEmptyText}>Aucun assignee disponible</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={[{ stableKey: '__none__', displayName: 'Non assigné', accountId: undefined, userId: undefined } as TicketAssignablePerson, ...assignees]}
-              keyExtractor={(item) => item.stableKey}
-              contentContainerStyle={styles.pickerList}
-              renderItem={({ item }) => {
-                const isNone     = item.stableKey === '__none__';
-                const isSelected = isNone
-                  ? selectedAssignee === null
-                  : selectedAssignee?.stableKey === item.stableKey;
-                return (
-                  <TouchableOpacity
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => {
-                      setSelectedAssignee(isNone ? null : item);
-                      setShowAssigneePicker(false);
-                    }}
-                  >
-                    {/* Avatar / initials */}
-                    <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
-                      {item.avatarUrl && !isNone ? (
-                        <Image source={{ uri: item.avatarUrl }} style={styles.avatarImage} />
-                      ) : (
-                        <Text style={[styles.avatarInitial, isSelected && styles.avatarInitialSelected]}>
-                          {isNone ? '—' : item.displayName.charAt(0).toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={styles.pickerItemInfo}>
-                      <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]}>
-                        {item.displayName}
-                      </Text>
-                      {item.email ? (
-                        <Text style={styles.pickerItemEmail}>{item.email}</Text>
-                      ) : null}
-                    </View>
-                    {isSelected && <Text style={styles.pickerCheckmark}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          )}
+  // ── Assignee picker view ─────────────────────────────────────────────
+  const assigneePickerView = showAssigneePicker ? (
+    <View style={styles.pickerOverlay}>
+      <View style={styles.pickerSheet}>
+        <View style={styles.pickerHeader}>
+          <Text style={styles.pickerTitle}>Assigner à</Text>
+          <TouchableOpacity onPress={() => setShowAssigneePicker(false)} style={styles.pickerCloseBtn}>
+            <Text style={styles.pickerCloseText}>✕</Text>
+          </TouchableOpacity>
         </View>
+
+        {assigneesLoading ? (
+          <View style={styles.pickerLoading}>
+            <ActivityIndicator color={INDIGO} />
+            <Text style={styles.pickerLoadingText}>Chargement…</Text>
+          </View>
+        ) : assignees.length === 0 ? (
+          <View style={styles.pickerEmpty}>
+            <Text style={styles.pickerEmptyText}>Aucun assignee disponible</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={[{ stableKey: '__none__', displayName: 'Non assigné', accountId: undefined, userId: undefined } as TicketAssignablePerson, ...assignees]}
+            keyExtractor={(item) => item.stableKey}
+            contentContainerStyle={styles.pickerList}
+            renderItem={({ item }) => {
+              const isNone     = item.stableKey === '__none__';
+              const isSelected = isNone
+                ? selectedAssignee === null
+                : selectedAssignee?.stableKey === item.stableKey;
+              return (
+                <TouchableOpacity
+                  style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                  onPress={() => {
+                    setSelectedAssignee(isNone ? null : item);
+                    setShowAssigneePicker(false);
+                  }}
+                >
+                  {/* Avatar / initials */}
+                  <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
+                    {item.avatarUrl && !isNone ? (
+                      <Image source={{ uri: item.avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={[styles.avatarInitial, isSelected && styles.avatarInitialSelected]}>
+                        {isNone ? '—' : item.displayName.charAt(0).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.pickerItemInfo}>
+                    <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]}>
+                      {item.displayName}
+                    </Text>
+                    {item.email ? (
+                      <Text style={styles.pickerItemEmail}>{item.email}</Text>
+                    ) : null}
+                  </View>
+                  {isSelected && <Text style={styles.pickerCheckmark}>✓</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        )}
       </View>
-    </Modal>
-  );
+    </View>
+  ) : null;
 
   // ── Recording badge ───────────────────────────────────────────────────
   const recordingBadge = (() => {
@@ -355,17 +362,13 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   // ── Main form ─────────────────────────────────────────────────────────
   return (
     <>
-      {assigneePickerModal}
       <Modal
         visible={visible && recorder.state !== 'recording' && recorder.state !== 'paused'}
         animationType="slide"
         transparent
         statusBarTranslucent
       >
-        <KeyboardAvoidingView
-          style={styles.overlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <FormOverlay style={styles.overlay}>
           <View style={styles.sheet}>
             {/* Header */}
             <View style={styles.header}>
@@ -533,7 +536,8 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
+        </FormOverlay>
+        {assigneePickerView}
       </Modal>
       {floatingRecordingWidget}
     </>
@@ -647,7 +651,11 @@ const styles = StyleSheet.create({
 
   // ── Picker modal ──────────────────────────────────────────────────────
   pickerOverlay: {
-    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)',
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 1000,
   },
   pickerSheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,

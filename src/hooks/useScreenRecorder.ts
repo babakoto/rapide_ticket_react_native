@@ -249,7 +249,25 @@ export function useScreenRecorder(opts: {
         const rawUri = res?.result?.outputURL ?? (typeof res?.result === 'string' ? res.result : undefined) ?? res?.outputURL ?? res?.url;
         console.log('[RapideTicket DEBUG] stopRecording response:', res, 'Parsed rawUri:', rawUri);
         if (typeof rawUri === 'string' && rawUri.length > 0) {
-          videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
+          const rawPath = rawUri.replace(/^file:\/\//, '');
+          if (Platform.OS === 'android') {
+            try {
+              const cacheFolder = `${RNFS.CachesDirectoryPath}/rapide_ticket_recording`;
+              const exists = await RNFS.exists(cacheFolder);
+              if (!exists) {
+                await RNFS.mkdir(cacheFolder);
+              }
+              const destPath = `${cacheFolder}/recording_${Date.now()}.mp4`;
+              await RNFS.copyFile(rawPath, destPath);
+              videoUri = `file://${destPath}`;
+              console.log('[RapideTicket DEBUG] Successfully copied Android screen recording to cache:', videoUri);
+            } catch (copyErr) {
+              console.warn('[RapideTicket DEBUG] Failed to copy Android screen recording to cache, using raw path:', copyErr);
+              videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
+            }
+          } else {
+            videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
+          }
         }
       } catch (e) {
         console.warn('[RapideTicket] stopRecording error', e);

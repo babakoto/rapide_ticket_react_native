@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import { View } from 'react-native';
 import { RapideTicketConfig } from '../types';
 import { SecretTriggerLayer } from './SecretTriggerLayer';
 import { RapideTicketModal } from './RapideTicketModal';
 import { SignInScreen } from './SignInScreen';
 import { AuthService } from '../services/AuthService';
-import { captureScreen } from 'react-native-view-shot';
+import { captureScreen, captureRef } from 'react-native-view-shot';
 import { useOAuthDeepLink } from '../hooks/useOAuthDeepLink';
 import { RapideTicketAPIClient } from '../services/RapideTicketAPIClient';
 
@@ -40,6 +41,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const isCapturing = useRef(false);
   const activeInviteToken = useRef<string | undefined>(undefined);
+  const containerRef = useRef<View>(null);
 
   const apiClient = useMemo(() => new RapideTicketAPIClient(config.projectId, config.flavor), [config.projectId, config.flavor]);
 
@@ -77,11 +79,30 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
     if (isCapturing.current || modalVisible || signInVisible) return;
     isCapturing.current = true;
 
+    // Small delay to allow layout / transitions to settle
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     let uri: string | null = null;
     try {
-      uri = await captureScreen({ format: 'png', quality: 0.8 });
+      if (containerRef.current) {
+        if (config.debug) {
+          console.log('[RapideTicket] Attempting captureRef on container...');
+        }
+        uri = await captureRef(containerRef, { format: 'png', quality: 0.8 });
+      } else {
+        if (config.debug) {
+          console.log('[RapideTicket] Attempting captureScreen fallback...');
+        }
+        uri = await captureScreen({ format: 'png', quality: 0.8 });
+      }
     } catch (e) {
-      console.warn('[RapideTicket] Screen capture failed:', e);
+      console.warn('[RapideTicket] Screen capture via captureRef failed:', e);
+      try {
+        // Fallback to captureScreen
+        uri = await captureScreen({ format: 'png', quality: 0.8 });
+      } catch (e2) {
+        console.warn('[RapideTicket] Screen capture fallback failed:', e2);
+      }
     } finally {
       isCapturing.current = false;
     }
@@ -112,7 +133,9 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
       value={{ config, openPanel: openWithCapture, closePanel: closeAll }}
     >
       <SecretTriggerLayer config={config} onTrigger={openWithCapture}>
-        {children}
+        <View ref={containerRef} style={{ flex: 1 }} collapsable={false}>
+          {children}
+        </View>
       </SecretTriggerLayer>
 
       {/* Authentication gate — shown when user is not signed in */}

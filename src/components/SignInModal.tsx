@@ -49,7 +49,7 @@ export const SignInModal: React.FC<Props> = ({ visible, config, onSuccess, onClo
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.sheet}>
           <View style={styles.header}>

@@ -42,6 +42,21 @@ import type { IssueCreateResult } from '../types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+/**
+ * Android fix: transparent Modals + KeyboardAvoidingView cause the form
+ * to bounce up/down when focusing text fields. The system's adjustResize
+ * conflicts with KAV's keyboard event listener, triggering layout oscillation.
+ * On Android we use a plain View and let adjustResize handle keyboard avoidance.
+ */
+const FormOverlay: React.FC<{ style: any; children: React.ReactNode }> =
+  Platform.OS === 'ios'
+    ? ({ style, children }) => (
+        <KeyboardAvoidingView style={style} behavior="padding">
+          {children}
+        </KeyboardAvoidingView>
+      )
+    : ({ style, children }) => <View style={style}>{children}</View>;
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -193,10 +208,7 @@ export const VideoTicketSheet: React.FC<Props> = ({
   // ── Form phase ─────────────────────────────────────────────────────────
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <FormOverlay style={styles.overlay}>
         <View style={styles.sheet}>
           {/* Header */}
           <View style={styles.header}>
@@ -274,7 +286,7 @@ export const VideoTicketSheet: React.FC<Props> = ({
             </TouchableOpacity>
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </FormOverlay>
     </Modal>
   );
 };

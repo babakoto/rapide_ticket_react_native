@@ -22,6 +22,9 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  Clipboard,
+  ToastAndroid,
+  Linking,
 } from 'react-native';
 import { AuthService } from '../services/AuthService';
 import { RapideTicketConfig } from '../types';
@@ -181,11 +184,35 @@ export const SignInScreen: React.FC<Props> = ({
         return;
       }
       if (authorizationUrl) {
-        // In a production app, open via Linking.openURL + deep link listener
         Alert.alert(
           'Atlassian OAuth',
           `Open this URL in your browser to sign in:\n\n${authorizationUrl}`,
-          [{ text: 'OK' }],
+          [
+            {
+              text: 'Copier le lien',
+              onPress: () => {
+                Clipboard.setString(authorizationUrl);
+                if (Platform.OS === 'android') {
+                  ToastAndroid.show('Lien copié avec succès !', ToastAndroid.SHORT);
+                } else {
+                  Alert.alert('Succès', 'Lien copié avec succès !');
+                }
+              },
+            },
+            {
+              text: 'Ouvrir',
+              onPress: () => {
+                Linking.openURL(authorizationUrl).catch((err) => {
+                  console.error('Failed to open URL:', err);
+                  Alert.alert('Erreur', "Impossible d'ouvrir le navigateur.");
+                });
+              },
+            },
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+          ],
         );
       }
     } catch (e: any) {
@@ -209,7 +236,7 @@ export const SignInScreen: React.FC<Props> = ({
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {/* Back button */}
           <TouchableOpacity style={styles.backBtn} onPress={onClose} disabled={busy}>
