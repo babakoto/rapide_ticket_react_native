@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { IssueCreateResult, RapideTicketConfig } from '../types';
 import { enrichDescriptionWithMetadata } from '../utils/deviceInfo';
+import RNFS from 'react-native-fs';
 
 const DEFAULT_API_BASE_URL = 'https://api.flutteradgents.com';
 
@@ -79,21 +80,57 @@ export class RapideTicketAPI {
 
     // Screen recording — MP4 (native) takes priority over PNG frames
     if (params.videoUri) {
-      form.append('files', {
-        uri: params.videoUri,
-        name: 'rapide_ticket_screen_recording.mp4',
-        type: 'video/mp4',
-      } as any);
+      // Normalize URI: on Android, fetch FormData needs 'file://' prefix;
+      // some native modules return bare paths.
+      let videoFileUri = params.videoUri;
+      const videoFilePath = videoFileUri.replace(/^file:\/\//, '');
+
+      // Verify the file actually exists and has content before attaching
+      try {
+        const exists = await RNFS.exists(videoFilePath);
+        if (exists) {
+          const stat = await RNFS.stat(videoFilePath);
+          console.log('[RapideTicket DEBUG] Video file verified:', videoFilePath, 'size:', stat.size, 'bytes');
+          // Ensure file:// prefix for FormData on both platforms
+          if (!videoFileUri.startsWith('file://')) {
+            videoFileUri = `file://${videoFileUri}`;
+          }
+          form.append('files', {
+            uri: videoFileUri,
+            name: 'rapide_ticket_screen_recording.mp4',
+            type: 'video/mp4',
+          } as any);
+        } else {
+          console.warn('[RapideTicket DEBUG] Video file NOT FOUND at:', videoFilePath);
+        }
+      } catch (fileErr) {
+        console.warn('[RapideTicket DEBUG] Error checking video file:', fileErr);
+        // Still try to attach it in case the path is valid but stat fails
+        form.append('files', {
+          uri: videoFileUri,
+          name: 'rapide_ticket_screen_recording.mp4',
+          type: 'video/mp4',
+        } as any);
+      }
     } else if (params.recordingFrames && params.recordingFrames.length > 0) {
       // Do NOT append all frames as separate files to prevent JIRA/Github attachment spam.
       // Instead, send the last captured frame as a fallback screenshot representing the recording.
       const lastFrame = params.recordingFrames[params.recordingFrames.length - 1];
+      console.log('[RapideTicket DEBUG] No videoUri, appending fallback frame:', lastFrame);
       form.append('files', {
         uri: lastFrame,
         name: 'rapide_ticket_screen_recording_fallback.png',
         type: 'image/png',
       } as any);
+    } else {
+      console.log('[RapideTicket DEBUG] No videoUri and no frames to attach!');
     }
+
+    console.log('[RapideTicket DEBUG] Full submit params:', JSON.stringify({
+      videoUri: params.videoUri,
+      screenshotUri: params.screenshotUri,
+      framesCount: params.recordingFrames?.length ?? 0,
+    }));
 
     const url = `${this.baseUrl}/api/v1/projects/${this.projectId}/issues`;
 

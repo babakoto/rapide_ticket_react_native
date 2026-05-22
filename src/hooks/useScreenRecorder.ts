@@ -117,6 +117,10 @@ export function useScreenRecorder(opts: {
   const [elapsed, setElapsed] = useState(0);   // seconds
   const [frames,  setFrames]  = useState(0);   // frame count (fallback mode)
 
+  // Ref to always have the latest state in callbacks (avoids stale closure)
+  const stateRef = useRef<RecorderState>(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
   const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
   const canUseNative = useRef(preferNative && hasNativeRecorder() && !isIosSimulator).current;
   const usingNative  = useRef(false);
@@ -186,7 +190,8 @@ export function useScreenRecorder(opts: {
 
   // ── start ────────────────────────────────────────────────────────────────
   const start = useCallback(async () => {
-    if (state !== 'idle' && state !== 'stopped') return;
+    const currentState = stateRef.current;
+    if (currentState !== 'idle' && currentState !== 'stopped') return;
 
     framesRef.current  = [];
     elapsedRef.current = 0;
@@ -204,9 +209,10 @@ export function useScreenRecorder(opts: {
         });
         if (res === 'started' || res?.status === 'recording' || res?.result === 'success' || res == null) {
           usingNative.current = true;
+          stateRef.current = 'recording';
           setState('recording');
           _startTimer();
-          // Auto-stop after maxDurationSeconds
+          // Auto-stop after maxDurationSeconds — uses stateRef so no stale closure
           autoStopRef.current = setTimeout(() => {
             _handleStop();
           }, maxDurationSeconds * 1000);
@@ -219,6 +225,7 @@ export function useScreenRecorder(opts: {
 
     // Fallback: frame capture
     usingNative.current = false;
+    stateRef.current = 'recording';
     setState('recording');
     _startTimer();
     _startFrameCapture();
@@ -226,11 +233,14 @@ export function useScreenRecorder(opts: {
     autoStopRef.current = setTimeout(() => {
       _handleStop();
     }, maxDurationSeconds * 1000);
-  }, [state, canUseNative, bitrate, maxDurationSeconds, _startTimer, _startFrameCapture]);
+  }, [canUseNative, bitrate, maxDurationSeconds, _startTimer, _startFrameCapture]);
 
   // Internal stop logic
   const _handleStop = useCallback(async (): Promise<ScreenRecorderResult> => {
-    if (state === 'idle') {
+    const currentState = stateRef.current;
+    console.log('[RapideTicket DEBUG] _handleStop called, stateRef.current =', currentState, 'usingNative =', usingNative.current);
+    if (currentState === 'idle') {
+      console.warn('[RapideTicket DEBUG] _handleStop bailing: state is idle');
       return { videoUri: null, frames: [], durationSeconds: 0, attachments: [] };
     }
 
@@ -247,7 +257,7 @@ export function useScreenRecorder(opts: {
         const res = await recorder.stopRecording();
         // react-native-record-screen returns { status: 'success', result: { outputURL } }
         const rawUri = res?.result?.outputURL ?? (typeof res?.result === 'string' ? res.result : undefined) ?? res?.outputURL ?? res?.url;
-        console.log('[RapideTicket DEBUG] stopRecording response:', res, 'Parsed rawUri:', rawUri);
+        console.log('[RapideTicket DEBUG] stopRecording response:', JSON.stringify(res), 'Parsed rawUri:', rawUri);
         if (typeof rawUri === 'string' && rawUri.length > 0) {
           const rawPath = rawUri.replace(/^file:\/\//, '');
           if (Platform.OS === 'android') {
@@ -268,6 +278,8 @@ export function useScreenRecorder(opts: {
           } else {
             videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
           }
+        } else {
+          console.warn('[RapideTicket DEBUG] stopRecording returned empty/invalid rawUri. Full res:', JSON.stringify(res));
         }
       } catch (e) {
         console.warn('[RapideTicket] stopRecording error', e);
@@ -278,19 +290,21 @@ export function useScreenRecorder(opts: {
 
     framesRef.current  = [];
     elapsedRef.current = 0;
+    stateRef.current = 'stopped';
     setState('stopped');
     setElapsed(0);
     setFrames(0);
 
     // attachments: video takes priority over frames
     const attachments = videoUri ? [videoUri] : persistedFrames;
+    console.log('[RapideTicket DEBUG] _handleStop returning videoUri:', videoUri, 'frames:', persistedFrames.length);
 
     return { videoUri, frames: persistedFrames, durationSeconds: duration, attachments };
-  }, [state, _stopTimer, _stopFrameCapture, _persistFrames]);
+  }, [_stopTimer, _stopFrameCapture, _persistFrames]);
 
   // ── pause ────────────────────────────────────────────────────────────────
   const pause = useCallback(async () => {
-    if (state !== 'recording') return;
+    if (stateRef.current !== 'recording') return;
 
     _stopTimer();
     pausedElapsedRef.current = elapsedRef.current;
@@ -301,12 +315,13 @@ export function useScreenRecorder(opts: {
     } else {
       _stopFrameCapture();
     }
+    stateRef.current = 'paused';
     setState('paused');
-  }, [state, _stopTimer, _stopFrameCapture]);
+  }, [_stopTimer, _stopFrameCapture]);
 
   // ── resume ───────────────────────────────────────────────────────────────
   const resume = useCallback(async () => {
-    if (state !== 'paused') return;
+    if (stateRef.current !== 'paused') return;
 
     elapsedRef.current = pausedElapsedRef.current;
 
@@ -316,9 +331,10 @@ export function useScreenRecorder(opts: {
     } else {
       _startFrameCapture();
     }
+    stateRef.current = 'recording';
     setState('recording');
     _startTimer();
-  }, [state, _startTimer, _startFrameCapture]);
+  }, [_startTimer, _startFrameCapture]);
 
   // ── stop ─────────────────────────────────────────────────────────────────
   const stop = _handleStop;
