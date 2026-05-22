@@ -66,8 +66,12 @@ function hasNativeRecorder(): boolean {
   try {
     // react-native-record-screen exposes RecordScreen native module
     const mod = require('react-native-record-screen');
-    return !!mod?.default || !!mod?.RecordScreen;
-  } catch {
+    const hasDefault = !!mod?.default;
+    const hasRecordScreen = !!mod?.RecordScreen;
+    console.log('[RapideTicket DEBUG] hasNativeRecorder: mod keys =', mod ? Object.keys(mod) : 'null', 'hasDefault =', hasDefault, 'hasRecordScreen =', hasRecordScreen);
+    return hasDefault || hasRecordScreen;
+  } catch (e) {
+    console.warn('[RapideTicket DEBUG] hasNativeRecorder: require failed:', e);
     return false;
   }
 }
@@ -75,8 +79,11 @@ function hasNativeRecorder(): boolean {
 function getNativeRecorder() {
   try {
     const mod = require('react-native-record-screen');
-    return mod?.default ?? mod?.RecordScreen ?? null;
-  } catch {
+    const recorder = mod?.default ?? mod?.RecordScreen ?? null;
+    console.log('[RapideTicket DEBUG] getNativeRecorder: got', recorder ? 'recorder object' : 'null', 'keys:', recorder ? Object.keys(recorder) : 'none');
+    return recorder;
+  } catch (e) {
+    console.warn('[RapideTicket DEBUG] getNativeRecorder: require failed:', e);
     return null;
   }
 }
@@ -122,7 +129,9 @@ export function useScreenRecorder(opts: {
   useEffect(() => { stateRef.current = state; }, [state]);
 
   const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
-  const canUseNative = useRef(preferNative && hasNativeRecorder() && !isIosSimulator).current;
+  const _hasNative = hasNativeRecorder();
+  const canUseNative = useRef(preferNative && _hasNative && !isIosSimulator).current;
+  console.log('[RapideTicket DEBUG] useScreenRecorder init: preferNative =', preferNative, 'hasNative =', _hasNative, 'isIosSimulator =', isIosSimulator, 'canUseNative =', canUseNative);
   const usingNative  = useRef(false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -202,11 +211,14 @@ export function useScreenRecorder(opts: {
     if (canUseNative) {
       const recorder = getNativeRecorder();
       try {
+        console.log('[RapideTicket DEBUG] start(): canUseNative=true, calling startRecording...');
+        console.log('[RapideTicket DEBUG] recorder methods:', typeof recorder.startRecording, typeof recorder.stopRecording);
         const res = await recorder.startRecording({
           mic:     false,
           bitrate,
           ...(Platform.OS === 'ios' ? {} : {}),
         });
+        console.log('[RapideTicket DEBUG] startRecording result:', JSON.stringify(res));
         if (res === 'started' || res?.status === 'recording' || res?.result === 'success' || res == null) {
           usingNative.current = true;
           stateRef.current = 'recording';
@@ -218,6 +230,7 @@ export function useScreenRecorder(opts: {
           }, maxDurationSeconds * 1000);
           return;
         }
+        console.warn('[RapideTicket DEBUG] startRecording returned unexpected result, falling back:', JSON.stringify(res));
       } catch (e) {
         console.warn('[RapideTicket] Native recorder failed, using frame fallback', e);
       }
