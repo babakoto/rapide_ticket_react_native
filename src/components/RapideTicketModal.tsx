@@ -91,6 +91,16 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     fps:      config.gif?.fps ?? 2,
     maxFrames: config.gif?.maxFrames ?? 60,
     preferNative: true,
+    onStop: (result) => {
+      setRecordResult({ videoUri: result.videoUri, frames: result.frames });
+      setDockMode('home');
+      Alert.alert(
+        '🎬 Enregistrement terminé',
+        result.videoUri
+          ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
+          : `Capture d'écran de fin d'enregistrement prête à joindre.`,
+      );
+    },
   });
 
   const [screen,          setScreen]          = useState<Screen>('form');
@@ -170,15 +180,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   };
 
   const handleGifStop = async () => {
-    const result = await recorder.stop();
-    setRecordResult({ videoUri: result.videoUri, frames: result.frames });
-    setDockMode('home');
-    Alert.alert(
-      '🎬 Enregistrement terminé',
-      result.videoUri
-        ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
-        : `Capture d'écran de fin d'enregistrement prête à joindre.`,
-    );
+    await recorder.stop();
   };
 
   // ── Submit ────────────────────────────────────────────────────────────
@@ -341,19 +343,21 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     if (!isRecording) return null;
 
     return (
-      <View style={styles.floatingContainer}>
-        <View style={styles.floatingPill}>
-          <Animated.View style={[styles.floatingDot, { opacity: pulseAnim }]} />
-          <Text style={styles.floatingTimer}>
-            Enregistrement {recorder.timerLabel}
-          </Text>
-          <TouchableOpacity
-            style={styles.floatingStopBtn}
-            onPress={handleGifStop}
-            activeOpacity={0.7}
-          >
-            <View style={styles.floatingStopIcon} />
-          </TouchableOpacity>
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <View style={styles.floatingContainer}>
+          <View style={styles.floatingPill}>
+            <Animated.View style={[styles.floatingDot, { opacity: pulseAnim }]} />
+            <Text style={styles.floatingTimer}>
+              Enregistrement {recorder.timerLabel}
+            </Text>
+            <TouchableOpacity
+              style={styles.floatingStopBtn}
+              onPress={handleGifStop}
+              activeOpacity={0.7}
+            >
+              <View style={styles.floatingStopIcon} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );

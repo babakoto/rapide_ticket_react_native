@@ -24,7 +24,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Platform, NativeModules } from 'react-native';
+import { Platform, NativeModules, PermissionsAndroid } from 'react-native';
 import { captureScreen } from 'react-native-view-shot';
 import RNFS from 'react-native-fs';
 import DeviceInfo from 'react-native-device-info';
@@ -111,6 +111,7 @@ export function useScreenRecorder(opts: {
   bitrate?: number;
   /** Auto-stop after this many seconds (default: 30) */
   maxDurationSeconds?: number;
+  onStop?: (result: ScreenRecorderResult) => void;
 } = {}): ScreenRecorderState {
   const {
     fps        = FALLBACK_FPS,
@@ -119,6 +120,11 @@ export function useScreenRecorder(opts: {
     bitrate    = 500_000,   // 0.5 Mbps — keeps file size manageable for upload
     maxDurationSeconds = 30,
   } = opts;
+
+  const onStopRef = useRef(opts.onStop);
+  useEffect(() => {
+    onStopRef.current = opts.onStop;
+  }, [opts.onStop]);
 
   const [state,   setState]   = useState<RecorderState>('idle');
   const [elapsed, setElapsed] = useState(0);   // seconds
@@ -209,6 +215,34 @@ export function useScreenRecorder(opts: {
     setFrames(0);
 
     if (canUseNative) {
+      if (Platform.OS === 'android') {
+        try {
+          console.log('[RapideTicket DEBUG] Android runtime permissions check...');
+          const hasAudioPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+          if (!hasAudioPerm) {
+            console.log('[RapideTicket DEBUG] RECORD_AUDIO not granted. Requesting...');
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+              {
+                title: 'Enregistrement d\'écran',
+                message: 'Rapide Ticket a besoin de l\'autorisation audio pour démarrer la capture d\'écran.',
+                buttonPositive: 'Autoriser',
+              }
+            );
+            console.log('[RapideTicket DEBUG] RECORD_AUDIO request result:', granted);
+          }
+          // Request POST_NOTIFICATIONS for Android 13+ (API 33+)
+          if (Platform.Version >= 33) {
+            const hasNotifPerm = await PermissionsAndroid.check('android.permission.POST_NOTIFICATIONS' as any);
+            if (!hasNotifPerm) {
+              await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS' as any);
+            }
+          }
+        } catch (permerr) {
+          console.warn('[RapideTicket DEBUG] Permissions request error:', permerr);
+        }
+      }
+
       const recorder = getNativeRecorder();
       try {
         console.log('[RapideTicket DEBUG] start(): canUseNative=true, calling startRecording...');
@@ -312,7 +346,10 @@ export function useScreenRecorder(opts: {
     const attachments = videoUri ? [videoUri] : persistedFrames;
     console.log('[RapideTicket DEBUG] _handleStop returning videoUri:', videoUri, 'frames:', persistedFrames.length);
 
-    return { videoUri, frames: persistedFrames, durationSeconds: duration, attachments };
+    const result = { videoUri, frames: persistedFrames, durationSeconds: duration, attachments };
+    onStopRef.current?.(result);
+
+    return result;
   }, [_stopTimer, _stopFrameCapture, _persistFrames]);
 
   // ── pause ────────────────────────────────────────────────────────────────
