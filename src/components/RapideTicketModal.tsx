@@ -148,12 +148,19 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
       setDescription('');
       setAnnotatedUri(null);
       setScreen('form');
-      setDockMode('home');
+      // If recorder is active (recovered from Activity recreation), keep gifRecording mode
+      const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
+      setDockMode(isActiveRecording ? 'gifRecording' : 'home');
       setRecordResult(null);
       setSelectedAssignee(null);
       setShowAssigneePicker(false);
     } else {
-      recorder.reset();
+      // Don't reset recorder if it's actively recording (recovered session
+      // from Android "Share an app" Activity recreation)
+      const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
+      if (!isActiveRecording) {
+        recorder.reset();
+      }
     }
   }, [visible]);
 

@@ -24,7 +24,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Platform, NativeModules, PermissionsAndroid } from 'react-native';
+import { Platform, NativeModules, PermissionsAndroid, AppState, AppStateStatus } from 'react-native';
 import { captureScreen } from 'react-native-view-shot';
 import RNFS from 'react-native-fs';
 import DeviceInfo from 'react-native-device-info';
@@ -104,6 +104,28 @@ const FALLBACK_FPS        = 2;
 const FALLBACK_MAX_FRAMES = 60;  // 30s at 2fps
 const FRAME_DIR           = `${RNFS.CachesDirectoryPath}/rapide_ticket_recording`;
 
+// ─── Persistent recording state (survives component re-mounts) ────────────────
+// On Android 14+, selecting "Share an app" in the MediaProjection dialog can
+// trigger an Activity recreation, which re-mounts the entire React tree.
+// This module-level store preserves the recording session so the hook can
+// recover it on re-initialization.
+
+interface PersistentRecordingState {
+  isActive: boolean;
+  isNative: boolean;
+  startedAt: number;      // Date.now() when recording started
+  pausedElapsed: number;  // elapsed seconds accumulated before any pause
+  isPaused: boolean;
+}
+
+const _persistentState: PersistentRecordingState = {
+  isActive: false,
+  isNative: false,
+  startedAt: 0,
+  pausedElapsed: 0,
+  isPaused: false,
+};
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useScreenRecorder(opts: {
@@ -128,8 +150,17 @@ export function useScreenRecorder(opts: {
     onStopRef.current = opts.onStop;
   }, [opts.onStop]);
 
-  const [state,   setState]   = useState<RecorderState>('idle');
-  const [elapsed, setElapsed] = useState(0);   // seconds
+  // Recover initial state from persistent store if a recording was active
+  // (handles Activity recreation on Android "Share an app" mode)
+  const _recoveredState = _persistentState.isActive
+    ? (_persistentState.isPaused ? 'paused' as RecorderState : 'recording' as RecorderState)
+    : 'idle' as RecorderState;
+  const _recoveredElapsed = _persistentState.isActive
+    ? Math.floor((Date.now() - _persistentState.startedAt) / 1000)
+    : 0;
+
+  const [state,   setState]   = useState<RecorderState>(_recoveredState);
+  const [elapsed, setElapsed] = useState(_recoveredElapsed);
   const [frames,  setFrames]  = useState(0);   // frame count (fallback mode)
 
   // Ref to always have the latest state in callbacks (avoids stale closure)
@@ -139,16 +170,17 @@ export function useScreenRecorder(opts: {
   const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
   const _hasNative = hasNativeRecorder();
   const canUseNative = useRef(preferNative && _hasNative && !isIosSimulator).current;
-  const usingNative  = useRef(false);
+  const usingNative  = useRef(_persistentState.isActive ? _persistentState.isNative : false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs for timers / frame data
-  const elapsedRef   = useRef(0);
+  const elapsedRef   = useRef(_recoveredElapsed);
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const framesRef    = useRef<string[]>([]);
-  const startTimeRef = useRef<number>(0);
-  const pausedElapsedRef = useRef(0);  // elapsed before last pause
+  const startTimeRef = useRef<number>(_persistentState.startedAt || 0);
+  const pausedElapsedRef = useRef(_persistentState.pausedElapsed || 0);
+  const hasRecoveredRef = useRef(false);
 
   // Tick timer every second
   const _startTimer = useCallback(() => {
@@ -204,6 +236,30 @@ export function useScreenRecorder(opts: {
     return saved;
   }, []);
 
+  // ── Recovery: restart timer if we recovered from an active recording ─────
+  useEffect(() => {
+    if (_persistentState.isActive && !hasRecoveredRef.current) {
+      hasRecoveredRef.current = true;
+      console.log('[RapideTicket] Recovered active recording session after re-mount.',
+        'native =', _persistentState.isNative,
+        'elapsed =', _recoveredElapsed, 's');
+      // Re-start the timer from the recovered elapsed time
+      if (!_persistentState.isPaused) {
+        _startTimer();
+      }
+      // Set up auto-stop for remaining time
+      const remaining = Math.max(0, maxDurationSeconds - _recoveredElapsed);
+      if (remaining > 0) {
+        autoStopRef.current = setTimeout(() => {
+          _handleStop();
+        }, remaining * 1000);
+      } else {
+        // Already past max duration, stop immediately
+        _handleStop();
+      }
+    }
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── start ────────────────────────────────────────────────────────────────
   const start = useCallback(async () => {
     const currentState = stateRef.current;
@@ -255,6 +311,12 @@ export function useScreenRecorder(opts: {
           stateRef.current = 'recording';
           setState('recording');
           _startTimer();
+          // Persist recording state at module level
+          _persistentState.isActive = true;
+          _persistentState.isNative = true;
+          _persistentState.startedAt = Date.now();
+          _persistentState.pausedElapsed = 0;
+          _persistentState.isPaused = false;
           // Auto-stop after maxDurationSeconds — uses stateRef so no stale closure
           autoStopRef.current = setTimeout(() => {
             _handleStop();
@@ -273,6 +335,12 @@ export function useScreenRecorder(opts: {
     setState('recording');
     _startTimer();
     _startFrameCapture();
+    // Persist recording state at module level
+    _persistentState.isActive = true;
+    _persistentState.isNative = false;
+    _persistentState.startedAt = Date.now();
+    _persistentState.pausedElapsed = 0;
+    _persistentState.isPaused = false;
     // Auto-stop fallback
     autoStopRef.current = setTimeout(() => {
       _handleStop();
@@ -338,6 +406,12 @@ export function useScreenRecorder(opts: {
     setState('stopped');
     setElapsed(0);
     setFrames(0);
+    // Clear persistent state
+    _persistentState.isActive = false;
+    _persistentState.isNative = false;
+    _persistentState.startedAt = 0;
+    _persistentState.pausedElapsed = 0;
+    _persistentState.isPaused = false;
 
     // attachments: video takes priority over frames
     const attachments = videoUri ? [videoUri] : persistedFrames;
@@ -364,6 +438,9 @@ export function useScreenRecorder(opts: {
     }
     stateRef.current = 'paused';
     setState('paused');
+    // Update persistent state
+    _persistentState.isPaused = true;
+    _persistentState.pausedElapsed = elapsedRef.current;
   }, [_stopTimer, _stopFrameCapture]);
 
   // ── resume ───────────────────────────────────────────────────────────────
@@ -381,6 +458,8 @@ export function useScreenRecorder(opts: {
     stateRef.current = 'recording';
     setState('recording');
     _startTimer();
+    // Update persistent state
+    _persistentState.isPaused = false;
   }, [_startTimer, _startFrameCapture]);
 
   // ── stop ─────────────────────────────────────────────────────────────────
@@ -395,6 +474,12 @@ export function useScreenRecorder(opts: {
     setState('idle');
     setElapsed(0);
     setFrames(0);
+    // Clear persistent state
+    _persistentState.isActive = false;
+    _persistentState.isNative = false;
+    _persistentState.startedAt = 0;
+    _persistentState.pausedElapsed = 0;
+    _persistentState.isPaused = false;
   }, [_stopTimer, _stopFrameCapture]);
 
   // Cleanup on unmount
