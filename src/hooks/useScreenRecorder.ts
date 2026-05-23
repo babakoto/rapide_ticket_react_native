@@ -60,32 +60,34 @@ export interface ScreenRecorderState {
   reset: () => void;
 }
 
-// ─── Native module detection ──────────────────────────────────────────────────
+// ─── Native module detection (cached at module level) ────────────────────────
 
-function hasNativeRecorder(): boolean {
+let _nativeRecorderModule: any = null;
+let _nativeRecorderChecked = false;
+let _nativeRecorderAvailable = false;
+
+function _detectNativeRecorder(): void {
+  if (_nativeRecorderChecked) return;
+  _nativeRecorderChecked = true;
   try {
-    // react-native-record-screen exposes RecordScreen native module
     const mod = require('react-native-record-screen');
-    const hasDefault = !!mod?.default;
-    const hasRecordScreen = !!mod?.RecordScreen;
-    console.log('[RapideTicket DEBUG] hasNativeRecorder: mod keys =', mod ? Object.keys(mod) : 'null', 'hasDefault =', hasDefault, 'hasRecordScreen =', hasRecordScreen);
-    return hasDefault || hasRecordScreen;
+    _nativeRecorderModule = mod?.default ?? mod?.RecordScreen ?? null;
+    _nativeRecorderAvailable = !!_nativeRecorderModule;
+    console.log('[RapideTicket] Native recorder available:', _nativeRecorderAvailable);
   } catch (e) {
-    console.warn('[RapideTicket DEBUG] hasNativeRecorder: require failed:', e);
-    return false;
+    _nativeRecorderAvailable = false;
+    console.log('[RapideTicket] Native recorder not installed, will use fallback');
   }
 }
 
+function hasNativeRecorder(): boolean {
+  _detectNativeRecorder();
+  return _nativeRecorderAvailable;
+}
+
 function getNativeRecorder() {
-  try {
-    const mod = require('react-native-record-screen');
-    const recorder = mod?.default ?? mod?.RecordScreen ?? null;
-    console.log('[RapideTicket DEBUG] getNativeRecorder: got', recorder ? 'recorder object' : 'null', 'keys:', recorder ? Object.keys(recorder) : 'none');
-    return recorder;
-  } catch (e) {
-    console.warn('[RapideTicket DEBUG] getNativeRecorder: require failed:', e);
-    return null;
-  }
+  _detectNativeRecorder();
+  return _nativeRecorderModule;
 }
 
 // ─── Timer helpers ────────────────────────────────────────────────────────────
@@ -137,7 +139,6 @@ export function useScreenRecorder(opts: {
   const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
   const _hasNative = hasNativeRecorder();
   const canUseNative = useRef(preferNative && _hasNative && !isIosSimulator).current;
-  console.log('[RapideTicket DEBUG] useScreenRecorder init: preferNative =', preferNative, 'hasNative =', _hasNative, 'isIosSimulator =', isIosSimulator, 'canUseNative =', canUseNative);
   const usingNative  = useRef(false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -217,10 +218,8 @@ export function useScreenRecorder(opts: {
     if (canUseNative) {
       if (Platform.OS === 'android') {
         try {
-          console.log('[RapideTicket DEBUG] Android runtime permissions check...');
           const hasAudioPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
           if (!hasAudioPerm) {
-            console.log('[RapideTicket DEBUG] RECORD_AUDIO not granted. Requesting...');
             const granted = await PermissionsAndroid.request(
               PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
               {
@@ -229,7 +228,6 @@ export function useScreenRecorder(opts: {
                 buttonPositive: 'Autoriser',
               }
             );
-            console.log('[RapideTicket DEBUG] RECORD_AUDIO request result:', granted);
           }
           // Request POST_NOTIFICATIONS for Android 13+ (API 33+)
           if (Platform.Version >= 33) {
@@ -239,20 +237,19 @@ export function useScreenRecorder(opts: {
             }
           }
         } catch (permerr) {
-          console.warn('[RapideTicket DEBUG] Permissions request error:', permerr);
+          console.warn('[RapideTicket] Permissions request error:', permerr);
         }
       }
 
       const recorder = getNativeRecorder();
       try {
-        console.log('[RapideTicket DEBUG] start(): canUseNative=true, calling startRecording...');
-        console.log('[RapideTicket DEBUG] recorder methods:', typeof recorder.startRecording, typeof recorder.stopRecording);
+        console.log('[RapideTicket] Starting native screen recording...');
         const res = await recorder.startRecording({
           mic:     false,
           bitrate,
           ...(Platform.OS === 'ios' ? {} : {}),
         });
-        console.log('[RapideTicket DEBUG] startRecording result:', JSON.stringify(res));
+        console.log('[RapideTicket] startRecording result:', JSON.stringify(res));
         if (res === 'started' || res?.status === 'recording' || res?.result === 'success' || res == null) {
           usingNative.current = true;
           stateRef.current = 'recording';
@@ -264,7 +261,7 @@ export function useScreenRecorder(opts: {
           }, maxDurationSeconds * 1000);
           return;
         }
-        console.warn('[RapideTicket DEBUG] startRecording returned unexpected result, falling back:', JSON.stringify(res));
+        console.warn('[RapideTicket] startRecording returned unexpected result, falling back:', JSON.stringify(res));
       } catch (e) {
         console.warn('[RapideTicket] Native recorder failed, using frame fallback', e);
       }
@@ -285,9 +282,9 @@ export function useScreenRecorder(opts: {
   // Internal stop logic
   const _handleStop = useCallback(async (): Promise<ScreenRecorderResult> => {
     const currentState = stateRef.current;
-    console.log('[RapideTicket DEBUG] _handleStop called, stateRef.current =', currentState, 'usingNative =', usingNative.current);
+    console.log('[RapideTicket] Stopping recorder, state =', currentState, 'native =', usingNative.current);
     if (currentState === 'idle') {
-      console.warn('[RapideTicket DEBUG] _handleStop bailing: state is idle');
+      console.warn('[RapideTicket] Stop called while idle, ignoring');
       return { videoUri: null, frames: [], durationSeconds: 0, attachments: [] };
     }
 
@@ -304,7 +301,7 @@ export function useScreenRecorder(opts: {
         const res = await recorder.stopRecording();
         // react-native-record-screen returns { status: 'success', result: { outputURL } }
         const rawUri = res?.result?.outputURL ?? (typeof res?.result === 'string' ? res.result : undefined) ?? res?.outputURL ?? res?.url;
-        console.log('[RapideTicket DEBUG] stopRecording response:', JSON.stringify(res), 'Parsed rawUri:', rawUri);
+        console.log('[RapideTicket] stopRecording response:', JSON.stringify(res));
         if (typeof rawUri === 'string' && rawUri.length > 0) {
           const rawPath = rawUri.replace(/^file:\/\//, '');
           if (Platform.OS === 'android') {
@@ -317,16 +314,16 @@ export function useScreenRecorder(opts: {
               const destPath = `${cacheFolder}/recording_${Date.now()}.mp4`;
               await RNFS.copyFile(rawPath, destPath);
               videoUri = `file://${destPath}`;
-              console.log('[RapideTicket DEBUG] Successfully copied Android screen recording to cache:', videoUri);
+              console.log('[RapideTicket] Android recording copied to cache:', videoUri);
             } catch (copyErr) {
-              console.warn('[RapideTicket DEBUG] Failed to copy Android screen recording to cache, using raw path:', copyErr);
+              console.warn('[RapideTicket] Failed to copy recording to cache, using raw path:', copyErr);
               videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
             }
           } else {
             videoUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
           }
         } else {
-          console.warn('[RapideTicket DEBUG] stopRecording returned empty/invalid rawUri. Full res:', JSON.stringify(res));
+          console.warn('[RapideTicket] stopRecording returned empty/invalid URI. Response:', JSON.stringify(res));
         }
       } catch (e) {
         console.warn('[RapideTicket] stopRecording error', e);
@@ -344,7 +341,7 @@ export function useScreenRecorder(opts: {
 
     // attachments: video takes priority over frames
     const attachments = videoUri ? [videoUri] : persistedFrames;
-    console.log('[RapideTicket DEBUG] _handleStop returning videoUri:', videoUri, 'frames:', persistedFrames.length);
+    console.log('[RapideTicket] Recording result: videoUri =', videoUri ? 'present' : 'null', ', frames =', persistedFrames.length);
 
     const result = { videoUri, frames: persistedFrames, durationSeconds: duration, attachments };
     onStopRef.current?.(result);

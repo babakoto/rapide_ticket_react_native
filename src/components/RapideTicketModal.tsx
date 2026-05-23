@@ -90,7 +90,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   const recorder = useScreenRecorder({
     fps:      config.gif?.fps ?? 2,
     maxFrames: config.gif?.maxFrames ?? 60,
-    preferNative: true,
+    preferNative: config.preferNative ?? true,
     onStop: (result) => {
       setRecordResult({ videoUri: result.videoUri, frames: result.frames });
       setDockMode('home');
@@ -365,7 +365,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
 
   // ── Main form ─────────────────────────────────────────────────────────
   return (
-    <>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Modal
         visible={visible && recorder.state !== 'recording' && recorder.state !== 'paused'}
         animationType="slide"
@@ -544,7 +544,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
         {assigneePickerView}
       </Modal>
       {floatingRecordingWidget}
-    </>
+    </View>
   );
 };
 

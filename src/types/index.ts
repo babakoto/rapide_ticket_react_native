@@ -155,6 +155,7 @@ export interface RapideTicketConfig {
     type: 'tap' | 'shake' | 'longpress';
     tapCount?: number;
   };
+  preferNative?: boolean;
   gif?: {
     enabled?: boolean;
     fps?: number;

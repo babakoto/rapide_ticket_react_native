@@ -132,28 +132,30 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
     <RapideTicketContext.Provider
       value={{ config, openPanel: openWithCapture, closePanel: closeAll }}
     >
-      <SecretTriggerLayer config={config} onTrigger={openWithCapture}>
-        <View ref={containerRef} style={{ flex: 1 }} collapsable={false}>
-          {children}
-        </View>
-      </SecretTriggerLayer>
+      <View style={{ flex: 1 }}>
+        <SecretTriggerLayer config={config} onTrigger={openWithCapture}>
+          <View ref={containerRef} style={{ flex: 1 }} collapsable={false}>
+            {children}
+          </View>
+        </SecretTriggerLayer>
 
-      {/* Authentication gate — shown when user is not signed in */}
-      <SignInScreen
-        visible={signInVisible}
-        config={config}
-        onSuccess={handleSignInSuccess}
-        onClose={closeAll}
-        inviteToken={activeInviteToken.current}
-      />
+        {/* Authentication gate — shown when user is not signed in */}
+        <SignInScreen
+          visible={signInVisible}
+          config={config}
+          onSuccess={handleSignInSuccess}
+          onClose={closeAll}
+          inviteToken={activeInviteToken.current}
+        />
 
-      {/* Bug report form — shown only after authentication */}
-      <RapideTicketModal
-        visible={modalVisible}
-        onClose={closeAll}
-        previewUri={previewUri}
-        inviteToken={activeInviteToken.current}
-      />
+        {/* Bug report form — shown only after authentication */}
+        <RapideTicketModal
+          visible={modalVisible}
+          onClose={closeAll}
+          previewUri={previewUri}
+          inviteToken={activeInviteToken.current}
+        />
+      </View>
     </RapideTicketContext.Provider>
   );
 };
