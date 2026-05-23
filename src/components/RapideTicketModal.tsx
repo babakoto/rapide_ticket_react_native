@@ -58,10 +58,12 @@ interface Props {
   inviteToken?: string;
 }
 
+let _shouldKeepRecordResult = false;
+
 type Screen = 'form' | 'annotate';
 
 export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUri, inviteToken }) => {
-  const { config } = useRapideTicket();
+  const { config, openPanelDirectly } = useRapideTicket();
   const { setImageUri } = useScreenCapture();
   const { submit, loading, error } = useTicketSubmit(config, inviteToken);
 
@@ -94,6 +96,8 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     onStop: (result) => {
       setRecordResult({ videoUri: result.videoUri, frames: result.frames });
       setDockMode('home');
+      _shouldKeepRecordResult = true;
+      openPanelDirectly();
       Alert.alert(
         '🎬 Enregistrement terminé',
         result.videoUri
@@ -144,16 +148,20 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   // ── Reset on open/close ───────────────────────────────────────────────
   useEffect(() => {
     if (visible) {
-      setTitle('');
-      setDescription('');
-      setAnnotatedUri(null);
-      setScreen('form');
-      // If recorder is active (recovered from Activity recreation), keep gifRecording mode
-      const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
-      setDockMode(isActiveRecording ? 'gifRecording' : 'home');
-      setRecordResult(null);
-      setSelectedAssignee(null);
-      setShowAssigneePicker(false);
+      if (_shouldKeepRecordResult) {
+        _shouldKeepRecordResult = false;
+      } else {
+        setTitle('');
+        setDescription('');
+        setAnnotatedUri(null);
+        setScreen('form');
+        // If recorder is active (recovered from Activity recreation), keep gifRecording mode
+        const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
+        setDockMode(isActiveRecording ? 'gifRecording' : 'home');
+        setRecordResult(null);
+        setSelectedAssignee(null);
+        setShowAssigneePicker(false);
+      }
     } else {
       // Don't reset recorder if it's actively recording (recovered session
       // from Android "Share an app" Activity recreation)
@@ -371,14 +379,22 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   })();
 
   // ── Main form ─────────────────────────────────────────────────────────
+  const showModal = visible && recorder.state !== 'recording' && recorder.state !== 'paused';
+  const showFloating = recorder.state === 'recording' || recorder.state === 'paused';
+
+  if (!showModal && !showFloating) {
+    return null;
+  }
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Modal
-        visible={visible && recorder.state !== 'recording' && recorder.state !== 'paused'}
-        animationType="slide"
-        transparent
-        statusBarTranslucent
-      >
+      {showModal && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          transparent
+          statusBarTranslucent
+        >
         <FormOverlay style={styles.overlay}>
           <View style={styles.sheet}>
             {/* Header */}
@@ -550,6 +566,7 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
         </FormOverlay>
         {assigneePickerView}
       </Modal>
+      )}
       {floatingRecordingWidget}
     </View>
   );

@@ -13,6 +13,7 @@ interface RapideTicketContextValue {
   config: RapideTicketConfig;
   openPanel: () => void;
   closePanel: () => void;
+  openPanelDirectly: () => void;
 }
 
 const RapideTicketContext = createContext<RapideTicketContextValue | null>(null);
@@ -115,6 +116,15 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
     handleOpenFlow(uri, opts);
   };
 
+  const openPanelDirectly = async () => {
+    const token = await AuthService.getToken();
+    if (!token) {
+      setSignInVisible(true);
+    } else {
+      setModalVisible(true);
+    }
+  };
+
   /** Called when sign-in succeeds → move to feedback modal */
   const handleSignInSuccess = () => {
     setSignInVisible(false);
@@ -130,7 +140,7 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
 
   return (
     <RapideTicketContext.Provider
-      value={{ config, openPanel: openWithCapture, closePanel: closeAll }}
+      value={{ config, openPanel: openWithCapture, closePanel: closeAll, openPanelDirectly }}
     >
       <View style={{ flex: 1 }}>
         <SecretTriggerLayer config={config} onTrigger={openWithCapture}>
@@ -140,13 +150,15 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
         </SecretTriggerLayer>
 
         {/* Authentication gate — shown when user is not signed in */}
-        <SignInScreen
-          visible={signInVisible}
-          config={config}
-          onSuccess={handleSignInSuccess}
-          onClose={closeAll}
-          inviteToken={activeInviteToken.current}
-        />
+        {signInVisible && (
+          <SignInScreen
+            visible={true}
+            config={config}
+            onSuccess={handleSignInSuccess}
+            onClose={closeAll}
+            inviteToken={activeInviteToken.current}
+          />
+        )}
 
         {/* Bug report form — shown only after authentication */}
         <RapideTicketModal

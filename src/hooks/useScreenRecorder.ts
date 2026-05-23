@@ -113,16 +113,16 @@ const FRAME_DIR           = `${RNFS.CachesDirectoryPath}/rapide_ticket_recording
 interface PersistentRecordingState {
   isActive: boolean;
   isNative: boolean;
-  startedAt: number;      // Date.now() when recording started
-  pausedElapsed: number;  // elapsed seconds accumulated before any pause
+  accumulatedSeconds: number; // total seconds recorded before the current run segment
+  segmentStartedAt: number;   // Date.now() when the current running segment started (0 if paused or idle)
   isPaused: boolean;
 }
 
 const _persistentState: PersistentRecordingState = {
   isActive: false,
   isNative: false,
-  startedAt: 0,
-  pausedElapsed: 0,
+  accumulatedSeconds: 0,
+  segmentStartedAt: 0,
   isPaused: false,
 };
 
@@ -156,7 +156,9 @@ export function useScreenRecorder(opts: {
     ? (_persistentState.isPaused ? 'paused' as RecorderState : 'recording' as RecorderState)
     : 'idle' as RecorderState;
   const _recoveredElapsed = _persistentState.isActive
-    ? Math.floor((Date.now() - _persistentState.startedAt) / 1000)
+    ? (_persistentState.isPaused
+        ? _persistentState.accumulatedSeconds
+        : _persistentState.accumulatedSeconds + Math.floor((Date.now() - _persistentState.segmentStartedAt) / 1000))
     : 0;
 
   const [state,   setState]   = useState<RecorderState>(_recoveredState);
@@ -178,8 +180,7 @@ export function useScreenRecorder(opts: {
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const framesRef    = useRef<string[]>([]);
-  const startTimeRef = useRef<number>(_persistentState.startedAt || 0);
-  const pausedElapsedRef = useRef(_persistentState.pausedElapsed || 0);
+  const pausedElapsedRef = useRef(_persistentState.isActive ? _persistentState.accumulatedSeconds : 0);
   const hasRecoveredRef = useRef(false);
 
   // Tick timer every second
@@ -314,8 +315,8 @@ export function useScreenRecorder(opts: {
           // Persist recording state at module level
           _persistentState.isActive = true;
           _persistentState.isNative = true;
-          _persistentState.startedAt = Date.now();
-          _persistentState.pausedElapsed = 0;
+          _persistentState.accumulatedSeconds = 0;
+          _persistentState.segmentStartedAt = Date.now();
           _persistentState.isPaused = false;
           // Auto-stop after maxDurationSeconds — uses stateRef so no stale closure
           autoStopRef.current = setTimeout(() => {
@@ -338,8 +339,8 @@ export function useScreenRecorder(opts: {
     // Persist recording state at module level
     _persistentState.isActive = true;
     _persistentState.isNative = false;
-    _persistentState.startedAt = Date.now();
-    _persistentState.pausedElapsed = 0;
+    _persistentState.accumulatedSeconds = 0;
+    _persistentState.segmentStartedAt = Date.now();
     _persistentState.isPaused = false;
     // Auto-stop fallback
     autoStopRef.current = setTimeout(() => {
@@ -409,8 +410,8 @@ export function useScreenRecorder(opts: {
     // Clear persistent state
     _persistentState.isActive = false;
     _persistentState.isNative = false;
-    _persistentState.startedAt = 0;
-    _persistentState.pausedElapsed = 0;
+    _persistentState.accumulatedSeconds = 0;
+    _persistentState.segmentStartedAt = 0;
     _persistentState.isPaused = false;
 
     // attachments: video takes priority over frames
@@ -440,7 +441,8 @@ export function useScreenRecorder(opts: {
     setState('paused');
     // Update persistent state
     _persistentState.isPaused = true;
-    _persistentState.pausedElapsed = elapsedRef.current;
+    _persistentState.accumulatedSeconds = elapsedRef.current;
+    _persistentState.segmentStartedAt = 0;
   }, [_stopTimer, _stopFrameCapture]);
 
   // ── resume ───────────────────────────────────────────────────────────────
@@ -460,6 +462,7 @@ export function useScreenRecorder(opts: {
     _startTimer();
     // Update persistent state
     _persistentState.isPaused = false;
+    _persistentState.segmentStartedAt = Date.now();
   }, [_startTimer, _startFrameCapture]);
 
   // ── stop ─────────────────────────────────────────────────────────────────
@@ -477,8 +480,8 @@ export function useScreenRecorder(opts: {
     // Clear persistent state
     _persistentState.isActive = false;
     _persistentState.isNative = false;
-    _persistentState.startedAt = 0;
-    _persistentState.pausedElapsed = 0;
+    _persistentState.accumulatedSeconds = 0;
+    _persistentState.segmentStartedAt = 0;
     _persistentState.isPaused = false;
   }, [_stopTimer, _stopFrameCapture]);
 
