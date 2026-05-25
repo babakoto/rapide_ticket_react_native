@@ -94,11 +94,12 @@ const InfoCallout: React.FC<{ icon: string; color: string; bg: string; text: str
 interface EmailFormProps {
   busy: boolean;
   loading: boolean;
+  setLoading: (l: boolean) => void;
   apiBaseUrl?: string;
   onSuccess: () => void;
 }
 
-const EmailPasswordForm: React.FC<EmailFormProps> = ({ busy, loading, apiBaseUrl, onSuccess }) => {
+const EmailPasswordForm: React.FC<EmailFormProps> = ({ busy, loading, setLoading, apiBaseUrl, onSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -107,11 +108,14 @@ const EmailPasswordForm: React.FC<EmailFormProps> = ({ busy, loading, apiBaseUrl
     setErr(null);
     if (!email.trim() || !email.includes('@')) { setErr('Invalid email'); return; }
     if (!password) { setErr('Password required'); return; }
+    setLoading(true);
     try {
       await AuthService.signIn(email.trim(), password, apiBaseUrl);
       onSuccess();
     } catch (e: any) {
       setErr(e?.message || 'Sign in failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -316,6 +320,7 @@ export const SignInScreen: React.FC<Props> = ({
               <EmailPasswordForm
                 busy={busy}
                 loading={emailLoading}
+                setLoading={setEmailLoading}
                 apiBaseUrl={config.apiBaseUrl}
                 onSuccess={handleEmailSuccess}
               />

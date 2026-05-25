@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Dimensions,
   SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
@@ -268,7 +270,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 12 : 12,
+    paddingBottom: 12,
     backgroundColor: '#111',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
