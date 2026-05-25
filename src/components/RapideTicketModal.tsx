@@ -51,18 +51,31 @@ const FormOverlay: React.FC<{ style: any; children: React.ReactNode }> =
       )
     : ({ style, children }) => <View style={style}>{children}</View>;
 
+import { ScreenRecorderState } from '../hooks/useScreenRecorder';
+
 interface Props {
   visible: boolean;
   onClose: () => void;
   previewUri?: string | null;
   inviteToken?: string;
+  recorder: ScreenRecorderState;
+  recordResult: { videoUri: string | null; frames: string[] } | null;
+  setRecordResult: React.Dispatch<React.SetStateAction<{ videoUri: string | null; frames: string[] } | null>>;
 }
 
 let _shouldKeepRecordResult = false;
 
 type Screen = 'form' | 'annotate';
 
-export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUri, inviteToken }) => {
+export const RapideTicketModal: React.FC<Props> = ({
+  visible,
+  onClose,
+  previewUri,
+  inviteToken,
+  recorder,
+  recordResult,
+  setRecordResult,
+}) => {
   const { config, openPanelDirectly } = useRapideTicket();
   const { setImageUri } = useScreenCapture();
   const { submit, loading, error } = useTicketSubmit(config, inviteToken);
@@ -88,65 +101,42 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
 
   const { assignees, loading: assigneesLoading } = useAssignees(config, signInMethod);
 
-  // Screen recorder (native MP4 + fallback frames)
-  const recorder = useScreenRecorder({
-    fps:      config.gif?.fps ?? 2,
-    maxFrames: config.gif?.maxFrames ?? 60,
-    preferNative: config.preferNative ?? true,
-    onStop: (result) => {
-      setRecordResult({ videoUri: result.videoUri, frames: result.frames });
-      setDockMode('home');
-      _shouldKeepRecordResult = true;
-      openPanelDirectly();
-      Alert.alert(
-        '🎬 Enregistrement terminé',
-        result.videoUri
-          ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
-          : `Capture d'écran de fin d'enregistrement prête à joindre.`,
-      );
-    },
-  });
-
   const [screen,          setScreen]          = useState<Screen>('form');
   const [title,           setTitle]           = useState('');
   const [description,     setDescription]     = useState('');
   const [annotatedUri,    setAnnotatedUri]    = useState<string | null>(null);
   const [dockMode,        setDockMode]        = useState<DockMode>('home');
-  const [recordResult,    setRecordResult]    = useState<{
-    videoUri: string | null;
-    frames: string[];
-  } | null>(null);
   const [selectedAssignee, setSelectedAssignee] = useState<TicketAssignablePerson | null>(null);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
 
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  // Recover form states on mount / recovery
+  useEffect(() => {
+    if (recorder.recoveredFormState) {
+      if (recorder.recoveredFormState.title) {
+        setTitle(recorder.recoveredFormState.title);
+      }
+      if (recorder.recoveredFormState.description) {
+        setDescription(recorder.recoveredFormState.description);
+      }
+    }
+  }, [recorder.recoveredFormState]);
 
   useEffect(() => {
-    const isRecording = recorder.state === 'recording' || recorder.state === 'paused';
-    if (isRecording) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.3,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1.0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
+    if (recorder.recoveredFormState?.assigneeStableKey && assignees.length > 0) {
+      const match = assignees.find((a) => a.stableKey === recorder.recoveredFormState?.assigneeStableKey);
+      if (match) {
+        setSelectedAssignee(match);
+      }
     }
-  }, [recorder.state]);
+  }, [recorder.recoveredFormState, assignees]);
 
   const effectiveUri = annotatedUri || previewUri;
 
   // ── Reset on open/close ───────────────────────────────────────────────
   useEffect(() => {
+    if (recorder.isRecovering) {
+      return;
+    }
     if (visible) {
       if (_shouldKeepRecordResult) {
         _shouldKeepRecordResult = false;
@@ -158,19 +148,11 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
         // If recorder is active (recovered from Activity recreation), keep gifRecording mode
         const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
         setDockMode(isActiveRecording ? 'gifRecording' : 'home');
-        setRecordResult(null);
         setSelectedAssignee(null);
         setShowAssigneePicker(false);
       }
-    } else {
-      // Don't reset recorder if it's actively recording (recovered session
-      // from Android "Share an app" Activity recreation)
-      const isActiveRecording = recorder.state === 'recording' || recorder.state === 'paused';
-      if (!isActiveRecording) {
-        recorder.reset();
-      }
     }
-  }, [visible]);
+  }, [visible, recorder.isRecovering]);
 
   // ── Dock action handlers ──────────────────────────────────────────────
 
@@ -182,7 +164,11 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
   };
 
   const handleGifStart = async () => {
-    await recorder.start();
+    await recorder.start({
+      title,
+      description,
+      assigneeStableKey: selectedAssignee?.stableKey,
+    });
     setDockMode('gifRecording');
   };
 
@@ -352,49 +338,14 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
     return null;
   })();
 
-  // ── Floating Recording Widget ─────────────────────────────────────────
-  const floatingRecordingWidget = (() => {
-    const isRecording = recorder.state === 'recording' || recorder.state === 'paused';
-    if (!isRecording) return null;
-
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        <View style={styles.floatingContainer}>
-          <View style={styles.floatingPill}>
-            <Animated.View style={[styles.floatingDot, { opacity: pulseAnim }]} />
-            <Text style={styles.floatingTimer}>
-              Enregistrement {recorder.timerLabel}
-            </Text>
-            <TouchableOpacity
-              style={styles.floatingStopBtn}
-              onPress={handleGifStop}
-              activeOpacity={0.7}
-            >
-              <View style={styles.floatingStopIcon} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  })();
-
-  // ── Main form ─────────────────────────────────────────────────────────
-  const showModal = visible && recorder.state !== 'recording' && recorder.state !== 'paused';
-  const showFloating = recorder.state === 'recording' || recorder.state === 'paused';
-
-  if (!showModal && !showFloating) {
-    return null;
-  }
-
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {showModal && (
-        <Modal
-          visible={true}
-          animationType="slide"
-          transparent
-          statusBarTranslucent
-        >
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
         <FormOverlay style={styles.overlay}>
           <View style={styles.sheet}>
             {/* Header */}
@@ -445,6 +396,11 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
                       : 'Capture d\'écran de fin (Fallback Simulateur)'
                     }
                   </Text>
+                  {Platform.OS === 'android' && recorder.canUseNative && (
+                    <Text style={[styles.recorderSub, { color: '#e67e22', marginTop: 4, fontSize: 11, fontWeight: '500' }]}>
+                      ⚠️ Sur Android 14+, veuillez choisir "Partager tout l'écran" (et non "Partager une application") pour éviter un écran blanc.
+                    </Text>
+                  )}
                   {recordingBadge}
                 </View>
 
@@ -480,9 +436,6 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
                   )}
                 </View>
               </View>
-
-              {/* Error */}
-              {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
 
               {/* Title */}
               <Text style={styles.label}>Titre <Text style={styles.req}>*</Text></Text>
@@ -566,9 +519,6 @@ export const RapideTicketModal: React.FC<Props> = ({ visible, onClose, previewUr
         </FormOverlay>
         {assigneePickerView}
       </Modal>
-      )}
-      {floatingRecordingWidget}
-    </View>
   );
 };
 

@@ -28,6 +28,7 @@ import { Platform, NativeModules, PermissionsAndroid, AppState, AppStateStatus }
 import { captureScreen } from 'react-native-view-shot';
 import RNFS from 'react-native-fs';
 import DeviceInfo from 'react-native-device-info';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,7 +54,13 @@ export interface ScreenRecorderState {
   canUseNative: boolean;
   /** Whether native recorder is active (vs frame fallback) */
   isNative: boolean;
-  start: () => Promise<void>;
+  isRecovering: boolean;
+  recoveredFormState: {
+    title?: string;
+    description?: string;
+    assigneeStableKey?: string;
+  } | null;
+  start: (formState?: { title: string; description: string; assigneeStableKey?: string }) => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
   stop: () => Promise<ScreenRecorderResult>;
@@ -110,12 +117,17 @@ const FRAME_DIR           = `${RNFS.CachesDirectoryPath}/rapide_ticket_recording
 // This module-level store preserves the recording session so the hook can
 // recover it on re-initialization.
 
+const STORAGE_KEY = '@rapide_ticket_recording_state';
+
 interface PersistentRecordingState {
   isActive: boolean;
   isNative: boolean;
   accumulatedSeconds: number; // total seconds recorded before the current run segment
   segmentStartedAt: number;   // Date.now() when the current running segment started (0 if paused or idle)
   isPaused: boolean;
+  title?: string;
+  description?: string;
+  assigneeStableKey?: string;
 }
 
 const _persistentState: PersistentRecordingState = {
@@ -125,6 +137,28 @@ const _persistentState: PersistentRecordingState = {
   segmentStartedAt: 0,
   isPaused: false,
 };
+
+async function savePersistentState(state: Partial<PersistentRecordingState>) {
+  Object.assign(_persistentState, state);
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(_persistentState));
+  } catch (e) {
+    console.warn('[RapideTicket] Failed to save persistent recording state:', e);
+  }
+}
+
+async function clearPersistentState() {
+  _persistentState.isActive = false;
+  _persistentState.isNative = false;
+  _persistentState.accumulatedSeconds = 0;
+  _persistentState.segmentStartedAt = 0;
+  _persistentState.isPaused = false;
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn('[RapideTicket] Failed to clear persistent recording state:', e);
+  }
+}
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -164,6 +198,12 @@ export function useScreenRecorder(opts: {
   const [state,   setState]   = useState<RecorderState>(_recoveredState);
   const [elapsed, setElapsed] = useState(_recoveredElapsed);
   const [frames,  setFrames]  = useState(0);   // frame count (fallback mode)
+  const [isRecovering, setIsRecovering] = useState(true);
+  const [recoveredFormState, setRecoveredFormState] = useState<{
+    title?: string;
+    description?: string;
+    assigneeStableKey?: string;
+  } | null>(null);
 
   // Ref to always have the latest state in callbacks (avoids stale closure)
   const stateRef = useRef<RecorderState>(state);
@@ -171,6 +211,8 @@ export function useScreenRecorder(opts: {
 
   const isIosSimulator = Platform.OS === 'ios' && DeviceInfo.isEmulatorSync();
   const _hasNative = hasNativeRecorder();
+  // Re-enable native recorder on Android. Android 14+ partial screen sharing ("Share an app") causes a white screen,
+  // but full screen sharing ("Share all screens") works. We will handle this via user education in the UI instead of disabling it.
   const canUseNative = useRef(preferNative && _hasNative && !isIosSimulator).current;
   const usingNative  = useRef(_persistentState.isActive ? _persistentState.isNative : false);
   const autoStopRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,32 +279,67 @@ export function useScreenRecorder(opts: {
     return saved;
   }, []);
 
-  // ── Recovery: restart timer if we recovered from an active recording ─────
+  // ── Recovery: check persistent storage and restart recording session ─────
   useEffect(() => {
-    if (_persistentState.isActive && !hasRecoveredRef.current) {
-      hasRecoveredRef.current = true;
-      console.log('[RapideTicket] Recovered active recording session after re-mount.',
-        'native =', _persistentState.isNative,
-        'elapsed =', _recoveredElapsed, 's');
-      // Re-start the timer from the recovered elapsed time
-      if (!_persistentState.isPaused) {
-        _startTimer();
+    (async () => {
+      try {
+        const storedStr = await AsyncStorage.getItem(STORAGE_KEY);
+        if (storedStr) {
+          const stored: PersistentRecordingState = JSON.parse(storedStr);
+          if (stored.isActive) {
+            hasRecoveredRef.current = true;
+            Object.assign(_persistentState, stored);
+
+            const now = Date.now();
+            const elapsedVal = stored.isPaused
+              ? stored.accumulatedSeconds
+              : stored.accumulatedSeconds + Math.floor((now - stored.segmentStartedAt) / 1000);
+
+            console.log('[RapideTicket] Recovered active recording session after AsyncStorage load.',
+              'native =', stored.isNative,
+              'elapsed =', elapsedVal, 's');
+
+            usingNative.current = stored.isNative;
+            elapsedRef.current = elapsedVal;
+            setElapsed(elapsedVal);
+            pausedElapsedRef.current = stored.isPaused ? stored.accumulatedSeconds : 0;
+
+            if (stored.title || stored.description || stored.assigneeStableKey) {
+              setRecoveredFormState({
+                title: stored.title,
+                description: stored.description,
+                assigneeStableKey: stored.assigneeStableKey,
+              });
+            }
+
+            const nextState = stored.isPaused ? 'paused' as RecorderState : 'recording' as RecorderState;
+            stateRef.current = nextState;
+            setState(nextState);
+
+            if (!stored.isPaused) {
+              _startTimer();
+            }
+
+            const remaining = Math.max(0, maxDurationSeconds - elapsedVal);
+            if (remaining > 0) {
+              autoStopRef.current = setTimeout(() => {
+                _handleStop();
+              }, remaining * 1000);
+            } else {
+              _handleStop();
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[RapideTicket] Error recovering from AsyncStorage:', e);
+      } finally {
+        setIsRecovering(false);
       }
-      // Set up auto-stop for remaining time
-      const remaining = Math.max(0, maxDurationSeconds - _recoveredElapsed);
-      if (remaining > 0) {
-        autoStopRef.current = setTimeout(() => {
-          _handleStop();
-        }, remaining * 1000);
-      } else {
-        // Already past max duration, stop immediately
-        _handleStop();
-      }
-    }
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── start ────────────────────────────────────────────────────────────────
-  const start = useCallback(async () => {
+  const start = useCallback(async (formState?: { title: string; description: string; assigneeStableKey?: string }) => {
     const currentState = stateRef.current;
     if (currentState !== 'idle' && currentState !== 'stopped') return;
 
@@ -271,6 +348,19 @@ export function useScreenRecorder(opts: {
     pausedElapsedRef.current = 0;
     setElapsed(0);
     setFrames(0);
+    setRecoveredFormState(null);
+
+    // Save active state to AsyncStorage BEFORE calling startRecording to survive activity recreation!
+    await savePersistentState({
+      isActive: true,
+      isNative: canUseNative,
+      accumulatedSeconds: 0,
+      segmentStartedAt: Date.now(),
+      isPaused: false,
+      title: formState?.title,
+      description: formState?.description,
+      assigneeStableKey: formState?.assigneeStableKey,
+    });
 
     if (canUseNative) {
       if (Platform.OS === 'android') {
@@ -312,21 +402,17 @@ export function useScreenRecorder(opts: {
           stateRef.current = 'recording';
           setState('recording');
           _startTimer();
-          // Persist recording state at module level
-          _persistentState.isActive = true;
-          _persistentState.isNative = true;
-          _persistentState.accumulatedSeconds = 0;
-          _persistentState.segmentStartedAt = Date.now();
-          _persistentState.isPaused = false;
           // Auto-stop after maxDurationSeconds — uses stateRef so no stale closure
           autoStopRef.current = setTimeout(() => {
             _handleStop();
           }, maxDurationSeconds * 1000);
           return;
         }
-        console.warn('[RapideTicket] startRecording returned unexpected result, falling back:', JSON.stringify(res));
+        console.warn('[RapideTicket] startRecording returned unexpected result, clearing state:', JSON.stringify(res));
+        await clearPersistentState();
       } catch (e) {
-        console.warn('[RapideTicket] Native recorder failed, using frame fallback', e);
+        console.warn('[RapideTicket] Native recorder failed, clearing state and using frame fallback', e);
+        await clearPersistentState();
       }
     }
 
@@ -336,12 +422,17 @@ export function useScreenRecorder(opts: {
     setState('recording');
     _startTimer();
     _startFrameCapture();
-    // Persist recording state at module level
-    _persistentState.isActive = true;
-    _persistentState.isNative = false;
-    _persistentState.accumulatedSeconds = 0;
-    _persistentState.segmentStartedAt = Date.now();
-    _persistentState.isPaused = false;
+    // Persist recording state for fallback (since it was cleared or not fully written)
+    await savePersistentState({
+      isActive: true,
+      isNative: false,
+      accumulatedSeconds: 0,
+      segmentStartedAt: Date.now(),
+      isPaused: false,
+      title: formState?.title,
+      description: formState?.description,
+      assigneeStableKey: formState?.assigneeStableKey,
+    });
     // Auto-stop fallback
     autoStopRef.current = setTimeout(() => {
       _handleStop();
@@ -408,11 +499,7 @@ export function useScreenRecorder(opts: {
     setElapsed(0);
     setFrames(0);
     // Clear persistent state
-    _persistentState.isActive = false;
-    _persistentState.isNative = false;
-    _persistentState.accumulatedSeconds = 0;
-    _persistentState.segmentStartedAt = 0;
-    _persistentState.isPaused = false;
+    await clearPersistentState();
 
     // attachments: video takes priority over frames
     const attachments = videoUri ? [videoUri] : persistedFrames;
@@ -440,9 +527,11 @@ export function useScreenRecorder(opts: {
     stateRef.current = 'paused';
     setState('paused');
     // Update persistent state
-    _persistentState.isPaused = true;
-    _persistentState.accumulatedSeconds = elapsedRef.current;
-    _persistentState.segmentStartedAt = 0;
+    await savePersistentState({
+      isPaused: true,
+      accumulatedSeconds: elapsedRef.current,
+      segmentStartedAt: 0,
+    });
   }, [_stopTimer, _stopFrameCapture]);
 
   // ── resume ───────────────────────────────────────────────────────────────
@@ -461,8 +550,10 @@ export function useScreenRecorder(opts: {
     setState('recording');
     _startTimer();
     // Update persistent state
-    _persistentState.isPaused = false;
-    _persistentState.segmentStartedAt = Date.now();
+    await savePersistentState({
+      isPaused: false,
+      segmentStartedAt: Date.now(),
+    });
   }, [_startTimer, _startFrameCapture]);
 
   // ── stop ─────────────────────────────────────────────────────────────────
@@ -477,12 +568,9 @@ export function useScreenRecorder(opts: {
     setState('idle');
     setElapsed(0);
     setFrames(0);
+    setRecoveredFormState(null);
     // Clear persistent state
-    _persistentState.isActive = false;
-    _persistentState.isNative = false;
-    _persistentState.accumulatedSeconds = 0;
-    _persistentState.segmentStartedAt = 0;
-    _persistentState.isPaused = false;
+    clearPersistentState();
   }, [_stopTimer, _stopFrameCapture]);
 
   // Cleanup on unmount
@@ -495,6 +583,8 @@ export function useScreenRecorder(opts: {
     timerLabel: formatTimer(elapsed),
     canUseNative,
     isNative: usingNative.current,
+    isRecovering,
+    recoveredFormState,
     start,
     pause,
     resume,

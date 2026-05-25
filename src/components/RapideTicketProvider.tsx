@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { View } from 'react-native';
+import { View, Alert, Platform } from 'react-native';
+import { useScreenRecorder } from '../hooks/useScreenRecorder';
+import { FloatingRecordingView } from './FloatingRecordingView';
 import { RapideTicketConfig } from '../types';
 import { SecretTriggerLayer } from './SecretTriggerLayer';
 import { RapideTicketModal } from './RapideTicketModal';
@@ -43,6 +45,35 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
   const isCapturing = useRef(false);
   const activeInviteToken = useRef<string | undefined>(undefined);
   const containerRef = useRef<View>(null);
+
+  const [recordResult, setRecordResult] = useState<{
+    videoUri: string | null;
+    frames: string[];
+  } | null>(null);
+
+  // Screen recorder (native MP4 + fallback frames)
+  const recorder = useScreenRecorder({
+    fps:          config.gif?.fps ?? 2,
+    maxFrames:    config.gif?.maxFrames ?? 60,
+    preferNative: config.preferNative ?? true,
+    onStop: (result) => {
+      setRecordResult({ videoUri: result.videoUri, frames: result.frames });
+      setModalVisible(true);
+      Alert.alert(
+        '🎬 Enregistrement terminé',
+        result.videoUri
+          ? `Vidéo MP4 (${result.durationSeconds}s) prête à joindre.`
+          : `Capture d'écran de fin d'enregistrement prête à joindre.`,
+      );
+    },
+  });
+
+  // Automatically close modal when recording is active (recovered on Android Activity recreation)
+  useEffect(() => {
+    if (!recorder.isRecovering && (recorder.state === 'recording' || recorder.state === 'paused')) {
+      setModalVisible(false);
+    }
+  }, [recorder.isRecovering, recorder.state]);
 
   const apiClient = useMemo(() => new RapideTicketAPIClient(config.projectId, config.flavor), [config.projectId, config.flavor]);
 
@@ -136,6 +167,8 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
     setModalVisible(false);
     setPreviewUri(null);
     activeInviteToken.current = undefined;
+    recorder.reset();
+    setRecordResult(null);
   };
 
   return (
@@ -166,6 +199,15 @@ export const RapideTicketProvider: React.FC<Props> = ({ config, children }) => {
           onClose={closeAll}
           previewUri={previewUri}
           inviteToken={activeInviteToken.current}
+          recorder={recorder}
+          recordResult={recordResult}
+          setRecordResult={setRecordResult}
+        />
+
+        {/* Floating Recording Indicator Overlay */}
+        <FloatingRecordingView
+          recorder={recorder}
+          onStop={recorder.stop}
         />
       </View>
     </RapideTicketContext.Provider>

@@ -1,6 +1,6 @@
 {
   "name": "rapide-ticket",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Bug reporting in-app for React Native",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
