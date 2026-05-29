@@ -132,6 +132,27 @@ export const RapideTicketModal: React.FC<Props> = ({
 
   const effectiveUri = annotatedUri || previewUri;
 
+  // ── Logout handler ──────────────────────────────────────────────────
+  const handleLogout = useCallback(() => {
+    Alert.alert(
+      'Déconnexion',
+      'Voulez-vous vous déconnecter ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Déconnexion',
+          style: 'destructive',
+          onPress: async () => {
+            await AuthService.signOut();
+            setSignInMethod('none');
+            setSelectedAssignee(null);
+            onClose();
+          },
+        },
+      ],
+    );
+  }, [onClose]);
+
   // ── Reset on open/close ───────────────────────────────────────────────
   useEffect(() => {
     if (recorder.isRecovering) {
@@ -351,10 +372,19 @@ export const RapideTicketModal: React.FC<Props> = ({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.grip} />
-              <Text style={styles.headerTitle}>Signaler un problème</Text>
-              <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
-                <Text style={styles.closeBtnText}>✕</Text>
-              </TouchableOpacity>
+              <View style={styles.headerRow}>
+                {signInMethod !== 'none' ? (
+                  <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={loading}>
+                    <Text style={styles.logoutBtnIcon}>↩</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.headerSpacer} />
+                )}
+                <Text style={styles.headerTitle}>Signaler un problème</Text>
+                <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
+                  <Text style={styles.closeBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView
@@ -538,8 +568,15 @@ const styles = StyleSheet.create({
     paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
   },
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 8 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e' },
-  closeBtn: { position: 'absolute', right: 16, top: 12, padding: 6 },
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    width: '100%',
+  },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e', flex: 1, textAlign: 'center' },
+  headerSpacer: { width: 34 },
+  logoutBtn: { padding: 6, width: 34, alignItems: 'center' },
+  logoutBtnIcon: { fontSize: 18, color: '#E53935' },
+  closeBtn: { padding: 6, width: 34, alignItems: 'center' },
   closeBtnText: { fontSize: 18, color: '#888' },
 
   body: { padding: 20, gap: 14 },
