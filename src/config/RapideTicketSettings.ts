@@ -12,7 +12,7 @@
  *   });
  */
 
-const HOSTED_API_BASE_URL    = 'https://api.flutteradgents.com';
+export const HOSTED_API_BASE_URL    = 'https://api.rapideticket.com';
 const DEFAULT_OAUTH_SCHEME   = 'rapideticket';
 const DEFAULT_OAUTH_PATH     = 'oauth';
 const DEFAULT_FLAVOR         = 'production';
@@ -36,7 +36,7 @@ export function detectClientPlatform(): ClientPlatform {
 export interface RapideTicketSettingsParams {
   /** Your project SDK key (fad_…) or UUID from the dashboard. Required. */
   projectId: string;
-  /** Override the default hosted API URL (default: https://api.flutteradgents.com) */
+  /** Override the default hosted API URL (default: https://api.rapideticket.com) */
   apiBaseUrl?: string;
   /** Force a client platform — auto-detected from Platform.OS if omitted */
   clientPlatform?: ClientPlatform;

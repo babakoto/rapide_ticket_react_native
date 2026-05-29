@@ -1,12 +1,13 @@
 import axios from 'axios';
 import { TicketPayload } from '../types';
+import { HOSTED_API_BASE_URL } from '../config/RapideTicketSettings';
 
 export class FlutteradgentsAPI {
   private baseUrl: string;
   private projectId: string;
   
   constructor(baseUrl: string, projectId: string) {
-    this.baseUrl = baseUrl || 'https://api.flutteradgents.com/v1';
+    this.baseUrl = baseUrl || `${HOSTED_API_BASE_URL}/v1`;
     this.projectId = projectId;
   }
 

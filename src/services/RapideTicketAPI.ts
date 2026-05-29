@@ -1,9 +1,8 @@
 import { Platform } from 'react-native';
 import { IssueCreateResult, RapideTicketConfig } from '../types';
 import { enrichDescriptionWithMetadata } from '../utils/deviceInfo';
+import { HOSTED_API_BASE_URL } from '../config/RapideTicketSettings';
 import RNFS from 'react-native-fs';
-
-const DEFAULT_API_BASE_URL = 'https://api.flutteradgents.com';
 
 /**
  * Submits an issue to the rapide_ticket backend.
@@ -16,7 +15,7 @@ export class RapideTicketAPI {
   private projectId: string;
 
   constructor(config: RapideTicketConfig) {
-    this.baseUrl = (config.apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = (config.apiBaseUrl || HOSTED_API_BASE_URL).replace(/\/+$/, '');
     this.projectId = config.projectId;
   }
 

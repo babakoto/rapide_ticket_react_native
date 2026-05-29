@@ -34,14 +34,13 @@ import {
   assignablePersonFromMember,
   getIssueSummary,
 } from '../types';
+import { HOSTED_API_BASE_URL } from '../config/RapideTicketSettings';
 
 export type { IssueCreateResult, JiraAssignableUser, ProjectMember, TicketAssignablePerson,
              AtlassianOAuthLoginStart, CreateIssueParams, IssueSyncStatus };
 export { assignablePersonFromJira, assignablePersonFromMember, getIssueSummary };
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
-
-const DEFAULT_BASE = 'https://api.flutteradgents.com';
 
 /** Reads JSON body on success, throws typed Error on failure (mirrors DioException._wrap) */
 async function _unwrap<T>(res: Response): Promise<T> {
@@ -56,7 +55,7 @@ async function _unwrap<T>(res: Response): Promise<T> {
   throw err;
 }
 
-function _cleanBase(url = DEFAULT_BASE) {
+function _cleanBase(url = HOSTED_API_BASE_URL) {
   return url.replace(/\/+$/, '');
 }
 

@@ -1,11 +1,10 @@
 import * as Keychain from 'react-native-keychain';
+import { HOSTED_API_BASE_URL } from '../config/RapideTicketSettings';
 
 const KEYCHAIN_SERVICE = 'rapide_ticket';
 const KEYCHAIN_USER = 'rapide_ticket_user';
 const REFRESH_TOKEN_SERVICE = 'rapide_ticket_refresh';
 const SIGN_IN_METHOD_SERVICE = 'rapide_ticket_sign_method';
-
-const DEFAULT_API_BASE_URL = 'https://api.flutteradgents.com';
 
 export interface AuthPayload {
   token: string;
@@ -100,7 +99,7 @@ export class AuthService {
   static async signIn(
     email: string,
     password: string,
-    apiBaseUrl = DEFAULT_API_BASE_URL,
+    apiBaseUrl = HOSTED_API_BASE_URL,
   ): Promise<AuthPayload> {
     const url = `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/auth/login`;
     const res = await fetch(url, {
@@ -127,7 +126,7 @@ export class AuthService {
    * POST /api/v1/auth/refresh
    * Renews the JWT using the stored refresh token.
    */
-  static async refreshAccessToken(apiBaseUrl = DEFAULT_API_BASE_URL): Promise<string> {
+  static async refreshAccessToken(apiBaseUrl = HOSTED_API_BASE_URL): Promise<string> {
     const refreshToken = await AuthService.getRefreshToken();
     if (!refreshToken) {
       throw new Error('Session expired — please sign in again.');
@@ -163,7 +162,7 @@ export class AuthService {
       returnUri?: string;
       inviteToken?: string;
     },
-    apiBaseUrl = DEFAULT_API_BASE_URL,
+    apiBaseUrl = HOSTED_API_BASE_URL,
   ): Promise<{ authorizationUrl: string | null; configured: boolean }> {
     const base = apiBaseUrl.replace(/\/+$/, '');
     const query = new URLSearchParams();
@@ -191,7 +190,7 @@ export class AuthService {
    */
   static async signInWithOAuthCode(
     code: string,
-    apiBaseUrl = DEFAULT_API_BASE_URL,
+    apiBaseUrl = HOSTED_API_BASE_URL,
   ): Promise<AuthPayload> {
     const url = `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/auth/oauth/atlassian/exchange`;
     const res = await fetch(url, {
