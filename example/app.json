@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "test_rapide_ticket",
-    "slug": "test_rapide_ticket",
+    "name": "Rapide Ticket",
+    "slug": "rapide-ticket",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "../lib/assets/logo_rapide_ticket.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "../lib/assets/logo_rapide_ticket.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -24,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "../lib/assets/logo_rapide_ticket.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -36,7 +36,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "../lib/assets/logo_rapide_ticket.png"
     }
   }
 }

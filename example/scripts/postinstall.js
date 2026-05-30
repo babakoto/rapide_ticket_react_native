@@ -9,20 +9,22 @@ if (fs.existsSync(moduleFile)) {
   let content = fs.readFileSync(moduleFile, 'utf8');
   
   // Make reactContext a private val so we can reference it
-  content = content.replace(
-    'class RecordScreenModule(reactContext: ReactApplicationContext)',
-    'class RecordScreenModule(private val reactContext: ReactApplicationContext)'
-  );
+  if (!content.includes('private val reactContext')) {
+    content = content.replace(
+      'class RecordScreenModule(reactContext: ReactApplicationContext)',
+      'class RecordScreenModule(private val reactContext: ReactApplicationContext)'
+    );
+  }
   
-  // Use reactContext.currentActivity
-  content = content.replace(
-    /currentActivity!!\.startActivityForResult/g,
-    'reactContext.currentActivity!!.startActivityForResult'
-  );
-  content = content.replace(
-    /reactApplicationContext\.currentActivity!!\.startActivityForResult/g,
-    'reactContext.currentActivity!!.startActivityForResult'
-  );
+  // Replace the entire startRecordingScreen function to be completely idempotent
+  const startRecordingScreenRegex = /private fun startRecordingScreen\(\) \{[\s\S]*?\}/;
+  const newStartRecordingScreen = `private fun startRecordingScreen() {
+    val mediaProjectionManager = reactApplicationContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager;
+    val permissionIntent = mediaProjectionManager.createScreenCaptureIntent();
+    reactContext.currentActivity!!.startActivityForResult(permissionIntent, SCREEN_RECORD_REQUEST_CODE);
+  }`;
+  
+  content = content.replace(startRecordingScreenRegex, newStartRecordingScreen);
 
   fs.writeFileSync(moduleFile, content, 'utf8');
   console.log('✅ Patched RecordScreenModule.kt');
