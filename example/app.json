@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "test_rapide_ticket",
+    "slug": "test_rapide_ticket",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.test-rapide-ticket",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Rapide Ticket utilise la caméra pour l'enregistrement d'écran via ReplayKit.",
+        "NSMicrophoneUsageDescription": "Rapide Ticket utilise le microphone pour inclure l'audio lors de l'enregistrement d'écran.",
+        "NSPhotoLibraryUsageDescription": "Rapide Ticket peut sauvegarder des captures d'écran dans votre photothèque.",
+        "NSPhotoLibraryAddUsageDescription": "Rapide Ticket peut enregistrer des vidéos dans votre photothèque."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.testrapideticket",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

@@ -53,3 +53,36 @@ RapideTicket.captureAndOpen();
 // Check if ready
 RapideTicket.isReady();
 ```
+
+---
+
+## 🧪 Running the Example (Local Testing)
+
+An example Expo application is available in the `example` folder to quickly test and debug the package during development.
+
+To run it:
+
+1. **Build and pack the library** at the root of `rapide_ticket_rn`:
+   ```bash
+   npm run pack-local
+   ```
+
+2. **Navigate to the example directory**:
+   ```bash
+   cd example
+   ```
+
+3. **Install dependencies** (uses the local package tarball):
+   ```bash
+   npm install
+   ```
+
+4. **Launch the application** on iOS or Android:
+   ```bash
+   npx expo run:ios
+   # or
+   npx expo run:android
+   ```
+
+For detailed guides and deep link testing, please refer to the [example README](file:///Users/mandresy/Documents/DEV/Flutter/packages/rapide_ticket_rn/example/README.md).
+
