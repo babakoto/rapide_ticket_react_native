@@ -25,7 +25,10 @@ import {
   Clipboard,
   ToastAndroid,
   Linking,
+  Image,
 } from 'react-native';
+
+const LogoImg = require('../assets/logo_rapide_ticket.png');
 import { AuthService } from '../services/AuthService';
 import { RapideTicketConfig } from '../types';
 
@@ -254,10 +257,7 @@ export const SignInScreen: React.FC<Props> = ({
           >
             {/* Brand header */}
             <View style={styles.brandHeader}>
-              <View style={styles.brandIcon}>
-                <Text style={{ fontSize: 32 }}>⚡</Text>
-              </View>
-              <Text style={styles.brandTitle}>RapideTicket</Text>
+              <Image source={LogoImg} style={styles.brandLogo} resizeMode="contain" />
               <Text style={styles.brandSubtitle}>
                 Sign in to capture, record and ship tickets in seconds.
               </Text>
@@ -349,14 +349,11 @@ const styles = StyleSheet.create({
 
   // Brand header
   brandHeader: { alignItems: 'center', marginBottom: 8 },
-  brandIcon: {
-    width: 72, height: 72, borderRadius: 22,
-    backgroundColor: '#5E5CE6',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#5E5CE6', shadowOpacity: 0.35, shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 22, elevation: 12, marginBottom: 16,
+  brandLogo: {
+    width: 140,
+    height: 60,
+    marginBottom: 16,
   },
-  brandTitle: { fontSize: 24, fontWeight: '800', color: '#1a1a2e', letterSpacing: -0.3, marginBottom: 6 },
   brandSubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 20 },
 
   // Callout

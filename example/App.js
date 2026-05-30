@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Linking, Image } from 'react-native';
 import { RapideTicketProvider, RapideTicket } from 'rapide-ticket';
+
+const LogoImg = require('./assets/logo_rapide_ticket.png');
 
 const PROJECT_ID = 'fad_f49d7158aa2c7ea7d88ba1eb75b98afc';
 
@@ -18,7 +20,7 @@ export default function App() {
       <View style={styles.container}>
         <StatusBar style="dark" />
 
-        <Text style={styles.title}>🐛 Rapide Ticket</Text>
+        <Image source={LogoImg} style={styles.logo} resizeMode="contain" />
         <Text style={styles.subtitle}>Test App</Text>
 
         <View style={styles.card}>
@@ -61,11 +63,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 20,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1a1a2e',
-    letterSpacing: 0.5,
+  logo: {
+    width: 220,
+    height: 70,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,

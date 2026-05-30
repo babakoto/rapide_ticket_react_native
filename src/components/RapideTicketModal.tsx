@@ -36,6 +36,8 @@ import { SecretFeedbackOverlay, DockMode } from './SecretFeedbackOverlay';
 import { getIssueSummary, TicketAssignablePerson, SignInMethod } from '../types';
 import { AuthService }        from '../services/AuthService';
 
+const LogoImg = require('../assets/logo_rapide_ticket.png');
+
 /**
  * Android fix: transparent Modals + KeyboardAvoidingView cause the form
  * to bounce up/down when focusing text fields. The system's adjustResize
@@ -380,7 +382,9 @@ export const RapideTicketModal: React.FC<Props> = ({
                 ) : (
                   <View style={styles.headerSpacer} />
                 )}
-                <Text style={styles.headerTitle}>Signaler un problème</Text>
+                <View style={styles.headerTitleContainer}>
+                  <Image source={LogoImg} style={styles.headerLogo} resizeMode="contain" />
+                </View>
                 <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
                   <Text style={styles.closeBtnText}>✕</Text>
                 </TouchableOpacity>
@@ -572,7 +576,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     width: '100%',
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e', flex: 1, textAlign: 'center' },
+  headerTitleContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerLogo: { width: 120, height: 32 },
   headerSpacer: { width: 34 },
   logoutBtn: { padding: 6, width: 34, alignItems: 'center' },
   logoutBtnIcon: { fontSize: 18, color: '#E53935' },
