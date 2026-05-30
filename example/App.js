@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, TouchableOpacity, Linking, Image } from 'react-native';
 import { RapideTicketProvider, RapideTicket } from 'rapide-ticket';
 
-const LogoImg = require('./assets/logo_rapide_ticket.png');
+const LogoImg = require('rapide-ticket/lib/assets/logo_rapide_ticket.png');
 
 const PROJECT_ID = 'fad_f49d7158aa2c7ea7d88ba1eb75b98afc';
 

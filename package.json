@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc && cp -r src/assets lib/assets",
+    "build": "rm -rf lib && tsc && cp -r src/assets lib/assets",
     "pack-local": "npm run build && npm pack"
   },
   "dependencies": {
