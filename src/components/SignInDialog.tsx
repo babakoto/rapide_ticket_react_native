@@ -18,6 +18,12 @@ import {
 import { AuthService } from '../services/AuthService';
 import { RapideTicketConfig } from '../types';
 
+const COLOR_INDIGO = '#5E5CE6';
+const COLOR_BLUE   = '#2684FF';
+const RT_INK       = '#172B4D';
+const RT_MUTED     = '#5E6C84';
+const RT_BORDER    = '#DFE1E6';
+
 interface Props {
   visible: boolean;
   config: RapideTicketConfig;
@@ -106,7 +112,7 @@ export const SignInDialog: React.FC<Props> = ({
                 disabled={busy}
               >
                 {atlassianBusy
-                  ? <ActivityIndicator size="small" color="#2684FF" />
+                  ? <ActivityIndicator size="small" color={COLOR_BLUE} />
                   : <Text style={styles.atlassianIcon}>🔗</Text>
                 }
                 <Text style={styles.atlassianText}>Atlassian</Text>
@@ -123,7 +129,7 @@ export const SignInDialog: React.FC<Props> = ({
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#9ca3af"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -136,7 +142,7 @@ export const SignInDialog: React.FC<Props> = ({
               <TextInput
                 style={[styles.input, { marginTop: 10 }]}
                 placeholder="Password"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -184,36 +190,36 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 16,
     minWidth: 300,
   },
-  title: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#6b7280', marginBottom: 16, lineHeight: 18 },
+  title: { fontSize: 18, fontWeight: '800', color: RT_INK, marginBottom: 4 },
+  subtitle: { fontSize: 13, color: RT_MUTED, marginBottom: 16, lineHeight: 18 },
   errorText: { color: '#DC2626', fontSize: 13, fontWeight: '600', marginBottom: 12 },
 
   atlassianBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#2684FF', borderRadius: 12,
+    borderWidth: 1.5, borderColor: COLOR_BLUE, borderRadius: 14,
     padding: 12, gap: 8, marginBottom: 4,
   },
   atlassianIcon: { fontSize: 18 },
-  atlassianText: { color: '#2684FF', fontWeight: '700', fontSize: 15 },
+  atlassianText: { color: COLOR_BLUE, fontWeight: '700', fontSize: 15 },
 
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 14, gap: 8 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(0,0,0,0.08)' },
-  dividerText: { color: '#9ca3af', fontSize: 12, fontWeight: '600' },
+  dividerLine: { flex: 1, height: 1, backgroundColor: RT_BORDER },
+  dividerText: { color: RT_MUTED, fontSize: 12, fontWeight: '600' },
 
   input: {
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11,
-    fontSize: 15, color: '#1a1a2e', backgroundColor: '#f9fafb',
+    borderWidth: 1, borderColor: RT_BORDER,
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, color: RT_INK, backgroundColor: '#f9fafb',
   },
 
   actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
   actionBtn: {
-    flex: 1, borderRadius: 12, paddingVertical: 13,
+    flex: 1, borderRadius: 14, paddingVertical: 14,
     alignItems: 'center', justifyContent: 'center',
   },
   cancelBtn: { backgroundColor: 'rgba(0,0,0,0.06)' },
-  cancelText: { color: '#6b7280', fontWeight: '600', fontSize: 14 },
-  submitBtn: { backgroundColor: '#5E5CE6' },
+  cancelText: { color: RT_MUTED, fontWeight: '600', fontSize: 14 },
+  submitBtn: { backgroundColor: COLOR_INDIGO },
   submitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   btnDisabled: { opacity: 0.5 },
 });

@@ -204,7 +204,7 @@ export const AnnotationEditor: React.FC<Props> = ({ screenshotUri, onDone, onCan
         </TouchableOpacity>
         <Text style={styles.toolbarTitle}>Annoter</Text>
         <TouchableOpacity style={[styles.toolbarBtn, styles.doneBtn]} onPress={handleDone}>
-          <Text style={[styles.toolbarBtnText, { color: '#6c63ff', fontWeight: '700' }]}>Terminé</Text>
+          <Text style={[styles.toolbarBtnText, { color: '#5E5CE6', fontWeight: '700' }]}>Terminé</Text>
         </TouchableOpacity>
       </View>
 
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  toolBtnActive: { backgroundColor: 'rgba(108,99,255,0.4)', borderWidth: 1.5, borderColor: '#6c63ff' },
+  toolBtnActive: { backgroundColor: 'rgba(94,92,230,0.35)', borderWidth: 1.5, borderColor: '#5E5CE6' },
   toolBtnDisabled: { opacity: 0.3 },
   toolBtnText: { fontSize: 20, color: '#fff' },
   separator: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: 4 },

@@ -25,67 +25,63 @@ export const COLOR_ICON   = '#44485A';
 
 export type DockMode = 'home' | 'gifReady' | 'gifRecording' | 'gifExporting';
 
-interface DockActionProps {
+// ─── CompactAction — Colored square icon (Flutter _CompactAction) ──────────
+interface CompactActionProps {
   icon: string;
-  label: string;
   tint: string;
   onPress: () => void;
 }
 
-/** Colored icon + label — main home dock actions */
-const DockAction: React.FC<DockActionProps> = ({ icon, label, tint, onPress }) => (
-  <TouchableOpacity style={styles.dockAction} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.dockActionIcon, {
-      backgroundColor: tint,
-      shadowColor: tint,
-    }]}>
-      <Text style={styles.dockActionEmoji}>{icon}</Text>
-    </View>
-    <Text style={styles.dockActionLabel}>{label}</Text>
+const CompactAction: React.FC<CompactActionProps> = ({ icon, tint, onPress }) => (
+  <TouchableOpacity
+    style={[styles.compactAction, { backgroundColor: tint }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.compactActionIcon}>{icon}</Text>
   </TouchableOpacity>
 );
 
-interface GhostActionProps {
+// ─── CompactGhost — Ghost bg icon (Flutter _CompactGhost) ──────────────────
+interface CompactGhostProps {
   icon: string;
-  label: string;
   onPress?: () => void;
 }
 
-/** Ghost (transparent bg) icon + label — secondary dock actions */
-const DockGhostAction: React.FC<GhostActionProps> = ({ icon, label, onPress }) => {
+const CompactGhost: React.FC<CompactGhostProps> = ({ icon, onPress }) => {
   const enabled = !!onPress;
   return (
     <TouchableOpacity
-      style={[styles.ghostAction, !enabled && { opacity: 0.35 }]}
+      style={[styles.compactGhost, !enabled && { opacity: 0.35 }]}
       onPress={onPress}
       disabled={!enabled}
       activeOpacity={0.7}
     >
-      <View style={styles.ghostIcon}>
-        <Text style={styles.ghostEmoji}>{icon}</Text>
-      </View>
-      <Text style={styles.ghostLabel}>{label}</Text>
+      <Text style={[styles.compactGhostIcon, !enabled && { opacity: 0.35 }]}>{icon}</Text>
     </TouchableOpacity>
   );
 };
 
-interface RoundBtnProps {
+// ─── CompactPrimary — Circle filled button (Flutter _CompactPrimary) ───────
+interface CompactPrimaryProps {
   icon: string;
   color: string;
   size?: number;
   onPress?: () => void;
 }
 
-/** Circular filled button — record / pause / stop */
-const PrimaryRoundButton: React.FC<RoundBtnProps> = ({ icon, color, size = 44, onPress }) => {
+const CompactPrimary: React.FC<CompactPrimaryProps> = ({ icon, color, size = 34, onPress }) => {
   const enabled = !!onPress;
   return (
     <TouchableOpacity
       style={[
-        styles.roundBtn,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-        { shadowColor: color },
-        !enabled && { opacity: 0.4 },
+        styles.compactPrimary,
+        {
+          width: size, height: size, borderRadius: size / 2,
+          backgroundColor: color,
+          shadowColor: color,
+        },
+        !enabled && { opacity: 0.45 },
       ]}
       onPress={onPress}
       disabled={!enabled}
@@ -96,22 +92,39 @@ const PrimaryRoundButton: React.FC<RoundBtnProps> = ({ icon, color, size = 44, o
   );
 };
 
-/** Pulsing red dot indicator */
-const RecordingPulse: React.FC<{ active: boolean; paused: boolean }> = ({ active, paused }) => {
+// ─── CompactClose — Dark circle close (Flutter _CompactClose) ──────────────
+interface CompactCloseProps {
+  onPress: () => void;
+}
+
+const CompactClose: React.FC<CompactCloseProps> = ({ onPress }) => (
+  <TouchableOpacity style={styles.compactClose} onPress={onPress} activeOpacity={0.7}>
+    <Text style={styles.compactCloseIcon}>✕</Text>
+  </TouchableOpacity>
+);
+
+// ─── RecordingDot (Flutter _RecordingDot) ──────────────────────────────────
+const RecordingDot: React.FC<{ active: boolean; paused: boolean }> = ({ active, paused }) => {
   const color = paused ? '#BDBDBD' : COLOR_RED;
   return (
     <View style={[
-      styles.pulse,
+      styles.recordingDot,
       { backgroundColor: color },
-      active && { shadowColor: COLOR_RED, shadowOpacity: 0.55, shadowRadius: 6, elevation: 4 },
+      active && !paused && {
+        shadowColor: COLOR_RED,
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        elevation: 4,
+      },
     ]} />
   );
 };
 
+// ─── Main Overlay ──────────────────────────────────────────────────────────
 interface OverlayProps {
   isSignedIn: boolean;
   dockMode: DockMode;
-  exportProgress?: number;             // 0.0 – 1.0 when dockMode === 'gifExporting'
+  exportProgress?: number;
   gifRecordingPaused?: boolean;
   gifTimerLabel?: string;
   gifRecIndicatorOn?: boolean;
@@ -143,54 +156,68 @@ export const SecretFeedbackOverlay: React.FC<OverlayProps> = ({
   onGifPauseOrResume,
   onGifStopAndFinish,
 }) => {
-  const renderDock = () => {
+  const showDismiss = dockMode !== 'gifRecording' && dockMode !== 'gifExporting';
+
+  const renderDockContent = () => {
     switch (dockMode) {
       case 'home':
         return (
           <View style={styles.dockRow}>
-            <DockAction icon="🎥" label="Video"   tint={COLOR_RED}   onPress={onRecordGif} />
-            <DockAction icon="📷" label="Capture" tint={COLOR_BLUE}  onPress={onScreenshot} />
-            <DockAction icon="✅" label="Ticket"  tint={COLOR_GREEN} onPress={onCreateTicket} />
-            <DockAction
-              icon={isSignedIn ? "🚪" : "👤"}
-              label={isSignedIn ? "Logout" : "Profile"}
+            <CompactAction icon="✅" tint={COLOR_GREEN} onPress={onCreateTicket} />
+            <View style={{ width: 6 }} />
+            <CompactAction
+              icon={isSignedIn ? '↩' : '👤'}
               tint={COLOR_SLATE}
               onPress={onAuthRowTap}
             />
+            {showDismiss && (
+              <>
+                <View style={{ width: 4 }} />
+                <CompactClose onPress={onDismiss} />
+              </>
+            )}
           </View>
         );
 
       case 'gifReady':
         return (
           <View style={styles.dockRow}>
-            <DockGhostAction icon="‹" label="Back" onPress={onGifBack} />
-            <PrimaryRoundButton icon="⏺" color={COLOR_RED} size={46} onPress={onGifStartRecording} />
-            <DockGhostAction
-              icon={isSignedIn ? "🚪" : "👤"}
-              label={isSignedIn ? "Logout" : "Profile"}
-              onPress={onAuthRowTap}
-            />
+            <CompactGhost icon="‹" onPress={onGifBack} />
+            <View style={{ width: 8 }} />
+            <CompactPrimary icon="⏺" color={COLOR_RED} size={36} onPress={onGifStartRecording} />
+            {showDismiss && (
+              <>
+                <View style={{ width: 8 }} />
+                <CompactClose onPress={onDismiss} />
+              </>
+            )}
           </View>
         );
 
       case 'gifRecording':
         return (
           <View style={styles.dockRow}>
-            <DockGhostAction icon="‹" label="Back" onPress={onGifBack} />
-            <RecordingPulse active={!gifRecordingPaused && gifRecIndicatorOn} paused={gifRecordingPaused} />
+            <CompactGhost icon="‹" onPress={onGifBack} />
+            <View style={{ width: 8 }} />
+            <RecordingDot
+              active={!gifRecordingPaused && gifRecIndicatorOn}
+              paused={gifRecordingPaused}
+            />
+            <View style={{ width: 6 }} />
             <Text style={styles.timerLabel}>{gifTimerLabel}</Text>
-            <PrimaryRoundButton
-              icon={gifRecordingPaused ? "▶" : "⏸"}
-              color={COLOR_BLUE}
-              size={36}
-              onPress={onGifPauseOrResume}
-            />
-            <PrimaryRoundButton icon="⏹" color={COLOR_SLATE} size={36} onPress={onGifStopAndFinish} />
-            <DockGhostAction
-              icon={isSignedIn ? "🚪" : "👤"}
-              label={isSignedIn ? "Logout" : "Profile"}
-              onPress={onAuthRowTap}
-            />
+            <View style={{ width: 8 }} />
+            {onGifPauseOrResume && (
+              <>
+                <CompactPrimary
+                  icon={gifRecordingPaused ? '▶' : '⏸'}
+                  color={COLOR_BLUE}
+                  size={32}
+                  onPress={onGifPauseOrResume}
+                />
+                <View style={{ width: 6 }} />
+              </>
+            )}
+            <CompactPrimary icon="⏹" color={COLOR_SLATE} size={32} onPress={onGifStopAndFinish} />
           </View>
         );
 
@@ -198,19 +225,11 @@ export const SecretFeedbackOverlay: React.FC<OverlayProps> = ({
         return (
           <View style={styles.exportContainer}>
             <View style={styles.exportRow}>
-              <Animated.View style={styles.exportSpinner}>
-                <Text style={{ color: COLOR_INDIGO, fontSize: 16 }}>⏳</Text>
-              </Animated.View>
-              <Text style={styles.exportLabel}>Encoding GIF…</Text>
+              <Text style={{ color: COLOR_INDIGO, fontSize: 14, marginRight: 8 }}>⏳</Text>
+              <Text style={styles.exportLabel}>Saving video…</Text>
               <Text style={styles.exportPct}>
-                {exportProgress <= 0.001 ? '…' : `${Math.round(exportProgress * 100)} %`}
+                {exportProgress <= 0.001 ? '…' : `${Math.round(exportProgress * 100)}%`}
               </Text>
-            </View>
-            <View style={styles.progressBg}>
-              <View style={[
-                styles.progressFill,
-                { width: exportProgress <= 0.001 ? '5%' : `${exportProgress * 100}%` },
-              ]} />
             </View>
           </View>
         );
@@ -219,17 +238,19 @@ export const SecretFeedbackOverlay: React.FC<OverlayProps> = ({
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Close button — top right */}
-      <TouchableOpacity style={styles.closeBtn} onPress={onDismiss}>
-        <View style={styles.closeBtnInner}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </View>
-      </TouchableOpacity>
-
       {/* Floating dock — bottom center */}
       <View style={styles.dockContainer} pointerEvents="box-none">
         <View style={styles.dockPill}>
-          {renderDock()}
+          {/* Drag indicator */}
+          <View style={styles.dragIndicator}>
+            <Text style={styles.dragIndicatorText}>⋮⋮</Text>
+          </View>
+          {/* Separator */}
+          <View style={styles.pillSeparator} />
+          {/* Content */}
+          <View style={styles.pillContent}>
+            {renderDockContent()}
+          </View>
         </View>
       </View>
     </View>
@@ -237,75 +258,100 @@ export const SecretFeedbackOverlay: React.FC<OverlayProps> = ({
 };
 
 const styles = StyleSheet.create({
-  // Close button
-  closeBtn: {
-    position: 'absolute', top: 50, right: 14, zIndex: 20,
-  },
-  closeBtnInner: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 8,
-  },
-  closeBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
-  // Dock
+  // Dock container
   dockContainer: {
     position: 'absolute', bottom: 20, left: 0, right: 0,
     alignItems: 'center', zIndex: 20,
   },
   dockPill: {
-    backgroundColor: '#fff', borderRadius: 4,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)',
-    paddingHorizontal: 16, paddingVertical: 4,
-    shadowColor: '#000', shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    paddingLeft: 6,
+    paddingRight: 6,
+    paddingVertical: 4,
+    minHeight: 46,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dragIndicator: {
+    paddingHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dragIndicatorText: {
+    fontSize: 16,
+    color: '#9A9AA8',
+    letterSpacing: -2,
+  },
+  pillSeparator: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E4E4EA',
+    marginHorizontal: 2,
+  },
+  pillContent: {
+    paddingHorizontal: 4,
   },
   dockRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54,
+    flexDirection: 'row', alignItems: 'center',
   },
 
-  // DockAction
-  dockAction: { alignItems: 'center', gap: 3, paddingVertical: 4 },
-  dockActionIcon: {
-    width: 38, height: 38, borderRadius: 13,
+  // CompactAction (Flutter _CompactAction)
+  compactAction: {
+    width: 34, height: 34, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
-    shadowOpacity: 0.28, shadowOffset: { width: 0, height: 3 }, shadowRadius: 8, elevation: 4,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
   },
-  dockActionEmoji: { fontSize: 18 },
-  dockActionLabel: { fontSize: 10, fontWeight: '700', color: COLOR_SLATE },
+  compactActionIcon: { fontSize: 15, color: '#fff' },
 
-  // Ghost action
-  ghostAction: { alignItems: 'center', gap: 2, paddingVertical: 4 },
-  ghostIcon: {
+  // CompactGhost (Flutter _CompactGhost)
+  compactGhost: {
     width: 32, height: 32, borderRadius: 10,
-    backgroundColor: '#F1F2F6', alignItems: 'center', justifyContent: 'center',
-  },
-  ghostEmoji: { fontSize: 16, color: COLOR_ICON },
-  ghostLabel: { fontSize: 9, fontWeight: '600', color: COLOR_ICON },
-
-  // Round button
-  roundBtn: {
+    backgroundColor: '#F1F2F6',
     alignItems: 'center', justifyContent: 'center',
-    shadowOpacity: 0.35, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 6,
   },
+  compactGhostIcon: { fontSize: 14, color: COLOR_ICON },
+
+  // CompactPrimary (Flutter _CompactPrimary)
+  compactPrimary: {
+    alignItems: 'center', justifyContent: 'center',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 4,
+  },
+
+  // CompactClose (Flutter _CompactClose)
+  compactClose: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#2C2C2E',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  compactCloseIcon: { fontSize: 14, color: '#fff', fontWeight: '700' },
+
+  // RecordingDot
+  recordingDot: { width: 8, height: 8, borderRadius: 4 },
 
   // Timer
-  timerLabel: { fontSize: 14, fontWeight: '800', color: COLOR_SLATE, letterSpacing: 0.2 },
-
-  // Recording pulse
-  pulse: { width: 10, height: 10, borderRadius: 5 },
-
-  // Export progress
-  exportContainer: { paddingHorizontal: 12, paddingVertical: 8, minWidth: 240 },
-  exportRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  exportSpinner: { marginRight: 8 },
-  exportLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: COLOR_SLATE },
-  exportPct: { fontSize: 13, fontWeight: '700', color: '#636366' },
-  progressBg: {
-    height: 4, backgroundColor: '#E8E8ED', borderRadius: 6, overflow: 'hidden',
+  timerLabel: {
+    fontSize: 14, fontWeight: '800', color: COLOR_SLATE,
+    letterSpacing: 0.2,
+    fontVariant: ['tabular-nums'],
   },
-  progressFill: {
-    height: 4, backgroundColor: COLOR_INDIGO, borderRadius: 6,
-  },
+
+  // Export progress (inline in pill)
+  exportContainer: { paddingHorizontal: 8, minWidth: 200 },
+  exportRow: { flexDirection: 'row', alignItems: 'center' },
+  exportLabel: { flex: 1, fontSize: 12, fontWeight: '700', color: COLOR_SLATE },
+  exportPct: { fontSize: 12, fontWeight: '700', color: '#636366', fontVariant: ['tabular-nums'] },
 });

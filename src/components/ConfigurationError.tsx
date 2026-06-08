@@ -38,14 +38,17 @@ export const ConfigurationError: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24,
+    backgroundColor: '#F8FBFF',
   },
   card: {
     maxWidth: 420, width: '100%', alignItems: 'center', gap: 12,
-    backgroundColor: '#fff', borderRadius: 20, padding: 28,
+    backgroundColor: '#fff', borderRadius: 24, padding: 28,
+    borderWidth: 1, borderColor: '#DFE1E6',
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
   },
   icon:    { fontSize: 52 },
-  title:   { fontSize: 20, fontWeight: '700', color: '#1a1a2e', textAlign: 'center' },
-  message: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 20 },
+  title:   { fontSize: 20, fontWeight: '700', color: '#172B4D', textAlign: 'center' },
+  message: { fontSize: 14, color: '#5E6C84', textAlign: 'center', lineHeight: 20 },
   footer:  { marginTop: 12, width: '100%' },
 });
+

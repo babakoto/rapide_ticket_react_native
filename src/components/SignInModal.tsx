@@ -13,6 +13,11 @@ import {
 import { AuthService } from '../services/AuthService';
 import { RapideTicketConfig } from '../types';
 
+const COLOR_INDIGO = '#5E5CE6';
+const RT_INK       = '#172B4D';
+const RT_MUTED     = '#5E6C84';
+const RT_BORDER    = '#DFE1E6';
+
 interface Props {
   visible: boolean;
   config: RapideTicketConfig;
@@ -65,7 +70,7 @@ export const SignInModal: React.FC<Props> = ({ visible, config, onSuccess, onClo
             <TextInput
               style={styles.input}
               placeholder="votre@email.com"
-              placeholderTextColor="#555"
+              placeholderTextColor="#9ca3af"
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -77,7 +82,7 @@ export const SignInModal: React.FC<Props> = ({ visible, config, onSuccess, onClo
             <TextInput
               style={styles.input}
               placeholder="••••••••"
-              placeholderTextColor="#555"
+              placeholderTextColor="#9ca3af"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -118,10 +123,10 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16,
@@ -132,24 +137,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: RT_BORDER,
   },
   grip: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: '#ddd',
     marginBottom: 16,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
+    color: RT_INK,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: RT_MUTED,
     textAlign: 'center',
   },
   body: {
@@ -158,26 +163,28 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
+    color: RT_MUTED,
     marginBottom: 8,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   input: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 12,
-    padding: 14,
+    borderColor: RT_BORDER,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     marginBottom: 16,
     fontSize: 15,
-    color: '#fff',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: RT_INK,
+    backgroundColor: '#f9fafb',
   },
   error: {
-    color: '#ff6b6b',
+    color: '#DC2626',
     fontSize: 13,
     marginTop: -8,
     marginBottom: 8,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
@@ -185,21 +192,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: RT_BORDER,
   },
   btn: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelBtn: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  cancelText: { color: 'rgba(255,255,255,0.6)', fontWeight: '600', fontSize: 15 },
+  cancelBtn: { backgroundColor: 'rgba(0,0,0,0.05)' },
+  cancelText: { color: RT_MUTED, fontWeight: '600', fontSize: 15 },
   submitBtn: {
-    backgroundColor: '#6c63ff',
-    shadowColor: '#6c63ff',
-    shadowOpacity: 0.4,
+    backgroundColor: COLOR_INDIGO,
+    shadowColor: COLOR_INDIGO,
+    shadowOpacity: 0.35,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 6,

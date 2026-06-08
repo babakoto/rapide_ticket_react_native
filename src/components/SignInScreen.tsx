@@ -51,10 +51,11 @@ interface Props {
   onClose: () => void;
 }
 
-// ─── Auth Provider Button ──────────────────────────────────────────────────
+// ─── Auth Provider Button (Flutter _AuthProviderButton) ────────────────────
 interface ProviderBtnProps {
   label: string;
   brandColor: string;
+  iconBackgroundColor?: string;
   icon: React.ReactNode;
   loading?: boolean;
   enabled: boolean;
@@ -63,15 +64,22 @@ interface ProviderBtnProps {
 }
 
 const AuthProviderButton: React.FC<ProviderBtnProps> = ({
-  label, brandColor, icon, loading = false, enabled, expanded = false, onPress,
+  label, brandColor, iconBackgroundColor, icon, loading = false, enabled, expanded = false, onPress,
 }) => (
   <TouchableOpacity
-    style={[styles.providerBtn, expanded && { borderColor: brandColor + '88', borderWidth: 1.5 }]}
+    style={[
+      styles.providerBtn,
+      expanded && { borderColor: brandColor + '8C', borderWidth: 1.6 },
+    ]}
     onPress={enabled ? onPress : undefined}
     activeOpacity={enabled ? 0.75 : 1}
   >
     <View style={{ opacity: enabled ? 1 : 0.55, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-      <View style={[styles.providerIcon, { backgroundColor: brandColor }]}>
+      <View style={[
+        styles.providerIcon,
+        { backgroundColor: iconBackgroundColor || brandColor },
+        { shadowColor: brandColor },
+      ]}>
         {icon}
       </View>
       <Text style={styles.providerLabel}>{label}</Text>
@@ -83,17 +91,17 @@ const AuthProviderButton: React.FC<ProviderBtnProps> = ({
   </TouchableOpacity>
 );
 
-// ─── Info Callout ──────────────────────────────────────────────────────────
+// ─── Info Callout (Flutter _InfoCallout) ────────────────────────────────────
 const InfoCallout: React.FC<{ icon: string; color: string; bg: string; text: string }> = ({
   icon, color, bg, text,
 }) => (
   <View style={[styles.callout, { backgroundColor: bg }]}>
-    <Text style={{ fontSize: 16, marginRight: 8 }}>{icon}</Text>
+    <Text style={{ fontSize: 16, marginRight: 10 }}>{icon}</Text>
     <Text style={[styles.calloutText, { color }]}>{text}</Text>
   </View>
 );
 
-// ─── Email/Password Form ────────────────────────────────────────────────────
+// ─── Email/Password Form (Flutter _EmailPasswordForm) ───────────────────────
 interface EmailFormProps {
   busy: boolean;
   loading: boolean;
@@ -110,7 +118,7 @@ const EmailPasswordForm: React.FC<EmailFormProps> = ({ busy, loading, setLoading
   const submit = async () => {
     setErr(null);
     if (!email.trim() || !email.includes('@')) { setErr('Invalid email'); return; }
-    if (!password) { setErr('Password required'); return; }
+    if (!password) { setErr('Required'); return; }
     setLoading(true);
     try {
       await AuthService.signIn(email.trim(), password, apiBaseUrl);
@@ -139,7 +147,8 @@ const EmailPasswordForm: React.FC<EmailFormProps> = ({ busy, loading, setLoading
           returnKeyType="next"
         />
       </View>
-      <View style={[styles.inputRow, { marginTop: 10 }]}>
+      <View style={{ height: 14 }} />
+      <View style={styles.inputRow}>
         <Text style={styles.inputPrefix}>🔒</Text>
         <TextInput
           style={styles.formInput}
@@ -245,9 +254,9 @@ export const SignInScreen: React.FC<Props> = ({
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          {/* Back button */}
+          {/* Back button (Flutter: circle Material bg surfaceContainerHighest) */}
           <TouchableOpacity style={styles.backBtn} onPress={onClose} disabled={busy}>
-            <Text style={styles.backBtnText}>‹</Text>
+            <Text style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
 
           <ScrollView
@@ -255,9 +264,11 @@ export const SignInScreen: React.FC<Props> = ({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Brand header */}
+            {/* Brand header (Flutter _BrandHeader) */}
             <View style={styles.brandHeader}>
               <Image source={LogoImg} style={styles.brandLogo} resizeMode="contain" />
+              <Text style={styles.brandTitle}>RapideTicket</Text>
+              <View style={{ height: 6 }} />
               <Text style={styles.brandSubtitle}>
                 Sign in to capture, record and ship tickets in seconds.
               </Text>
@@ -282,7 +293,8 @@ export const SignInScreen: React.FC<Props> = ({
             <AuthProviderButton
               label="Jira Authentication"
               brandColor={COLOR_JIRA_BLUE}
-              icon={<Text style={styles.glyphText}>J</Text>}
+              iconBackgroundColor="#fff"
+              icon={<Text style={[styles.glyphText, { color: COLOR_JIRA_BLUE }]}>J</Text>}
               loading={atlassianBusy}
               enabled={!busy}
               onPress={handleAtlassian}
@@ -339,69 +351,80 @@ export const SignInScreen: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   scroll: { padding: 24, paddingTop: 56, gap: 12 },
+
+  // Back button (Flutter: circle, surfaceContainerHighest @ 0.92, elevation 2)
   backBtn: {
     position: 'absolute', top: 8, left: 8, zIndex: 10,
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, elevation: 2,
   },
-  backBtnText: { fontSize: 28, color: '#333', lineHeight: 36 },
+  backBtnText: { fontSize: 22, color: '#333', lineHeight: 28 },
 
-  // Brand header
-  brandHeader: { alignItems: 'center', marginBottom: 8 },
+  // Brand header (Flutter _BrandHeader)
+  brandHeader: { alignItems: 'center', marginBottom: 16 },
   brandLogo: {
-    width: 140,
-    height: 60,
-    marginBottom: 16,
+    width: 96,
+    height: 96,
+    marginBottom: 18,
   },
-  brandSubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 20 },
+  brandTitle: {
+    fontSize: 22, fontWeight: '800', color: '#1a1a2e',
+    letterSpacing: -0.3, textAlign: 'center',
+  },
+  brandSubtitle: {
+    fontSize: 14, color: '#6b7280', textAlign: 'center',
+    lineHeight: 20,
+  },
 
-  // Callout
+  // Callout (Flutter _InfoCallout)
   callout: {
     flexDirection: 'row', alignItems: 'flex-start',
-    borderRadius: 14, padding: 12, marginBottom: 4,
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 4,
   },
   calloutText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 20 },
 
-  // Provider buttons
+  // Provider buttons (Flutter _AuthProviderButton)
   providerBtn: {
     backgroundColor: '#fff', borderRadius: 18,
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)',
-    padding: 14,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4, elevation: 2,
+    paddingHorizontal: 14, paddingVertical: 14,
   },
   providerIcon: {
     width: 44, height: 44, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 14,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 4,
+    shadowOpacity: 0.32, shadowOffset: { width: 0, height: 6 }, shadowRadius: 14, elevation: 4,
   },
   providerLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
   providerChevron: { fontSize: 20, color: '#9ca3af' },
   glyphText: { color: '#fff', fontWeight: '900', fontSize: 16 },
 
-  // Email form
+  // Email form (Flutter _EmailPasswordForm — DecoratedBox)
   emailForm: {
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 18,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)',
-    padding: 16, marginTop: -4,
+    backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 18,
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
+    padding: 16, marginTop: 2,
   },
   formError: { color: '#DC2626', fontSize: 13, marginBottom: 8, fontWeight: '600' },
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 12,
+    backgroundColor: '#fff', borderRadius: 14,
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
   inputPrefix: { fontSize: 16, color: '#9ca3af', marginRight: 8 },
-  formInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1a1a2e' },
+  formInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#1a1a2e' },
   signInBtn: {
     backgroundColor: COLOR_EMAIL_INDIGO, borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center', marginTop: 14,
+    paddingVertical: 14, alignItems: 'center', marginTop: 18,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   signInBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnDisabled: { opacity: 0.6 },
 
-  footer: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  footer: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 16, lineHeight: 18 },
 });

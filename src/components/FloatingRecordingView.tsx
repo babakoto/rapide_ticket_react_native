@@ -2,6 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Animated, Platform } from 'react-native';
 import { ScreenRecorderState } from '../hooks/useScreenRecorder';
 
+const RT_INK   = '#172B4D';
+const RT_MUTED = '#5E6C84';
+
 interface Props {
   recorder: ScreenRecorderState;
   onStop: () => Promise<any>;
@@ -66,40 +69,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 999999,
   },
+  // White pill — matches Flutter's overlay pill style
   floatingPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(28, 28, 30, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 100,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(0, 0, 0, 0.1)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.44,
-    shadowRadius: 10.32,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 8,
   },
   floatingDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#E53935',
     marginRight: 10,
   },
   floatingTimer: {
-    color: '#FFF',
+    color: RT_INK,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     marginRight: 14,
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontVariant: ['tabular-nums'],
   },
   floatingStopBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#2C2C2E',
     alignItems: 'center',
     justifyContent: 'center',
   },

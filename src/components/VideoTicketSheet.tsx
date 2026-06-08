@@ -42,6 +42,18 @@ import type { IssueCreateResult } from '../types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+// ─── Flutter color palette ──────────────────────────────────────────────────
+const RT_BLUE      = '#2051E8';
+const RT_BLUE_SOFT = '#E8F0FF';
+const RT_INK       = '#172B4D';
+const RT_MUTED     = '#5E6C84';
+const RT_SURFACE   = '#F8FBFF';
+const RT_FIELD     = '#F7F9FC';
+const RT_BORDER    = '#DFE1E6';
+const RT_GREEN     = '#1F9D68';
+const INDIGO       = '#5E5CE6';
+const RED          = '#E53935';
+
 /**
  * Android fix: transparent Modals + KeyboardAvoidingView cause the form
  * to bounce up/down when focusing text fields. The system's adjustResize
@@ -75,9 +87,6 @@ interface Props {
 }
 
 type Phase = 'preview' | 'form' | 'annotate';
-
-const INDIGO = '#5E5CE6';
-const RED    = '#E53935';
 
 export const VideoTicketSheet: React.FC<Props> = ({
   visible,
@@ -153,7 +162,7 @@ export const VideoTicketSheet: React.FC<Props> = ({
     );
   }
 
-  // ── Preview phase ──────────────────────────────────────────────────────
+  // ── Preview phase (Flutter _VideoTicketPostEncodeSheet — preview mode) ──
   if (phase === 'preview') {
     return (
       <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
@@ -161,12 +170,12 @@ export const VideoTicketSheet: React.FC<Props> = ({
           <View style={[styles.sheet, styles.previewSheet]}>
             <View style={styles.grip} />
             <Text style={styles.previewTitle}>
-              {hasVideo ? '🎬 Enregistrement prêt' : '🖼 Capture d\'écran prête'}
+              {hasVideo ? 'Recording ready' : 'Screenshot ready'}
             </Text>
             <Text style={styles.previewSub}>
               {hasVideo
-                ? 'Vidéo MP4 — prête à joindre au ticket'
-                : 'Capture d\'écran de fin d\'enregistrement (Fallback Simulateur)'
+                ? 'Close to dismiss, or create a ticket with this video attached.'
+                : 'Close to dismiss, or create a ticket with this screenshot attached.'
               }
             </Text>
 
@@ -190,13 +199,13 @@ export const VideoTicketSheet: React.FC<Props> = ({
 
             <View style={styles.previewActions}>
               <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={onClose}>
-                <Text style={[styles.btnText, styles.btnOutlineText]}>Fermer</Text>
+                <Text style={[styles.btnText, styles.btnOutlineText]}>Close</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btn, styles.btnPrimary]}
                 onPress={() => setPhase('form')}
               >
-                <Text style={styles.btnText}>Créer un ticket</Text>
+                <Text style={styles.btnText}>Create ticket</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -205,7 +214,7 @@ export const VideoTicketSheet: React.FC<Props> = ({
     );
   }
 
-  // ── Form phase ─────────────────────────────────────────────────────────
+  // ── Form phase (Flutter _VideoTicketPostEncodeSheet — form mode) ────────
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <FormOverlay style={styles.overlay}>
@@ -220,19 +229,31 @@ export const VideoTicketSheet: React.FC<Props> = ({
             >
               <Text style={styles.backBtnText}>←</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Créer un ticket</Text>
+            <Text style={styles.headerTitle}>Create a ticket</Text>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={loading}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-            {/* Recording badge */}
+            {/* Recording badge (Flutter _GifAttachmentSummaryCard) */}
             <View style={styles.recordingBadge}>
               <Text style={styles.recordingBadgeIcon}>{hasVideo ? '🎬' : '🖼'}</Text>
-              <Text style={styles.recordingBadgeText}>
-                {hasVideo ? 'Vidéo MP4 jointe' : 'Capture d\'écran de fin d\'enregistrement jointe'}
-              </Text>
+              <View style={styles.recordingBadgeInfo}>
+                <View style={styles.recordingBadgeRow}>
+                  {hasVideo && (
+                    <View style={styles.mp4Tag}>
+                      <Text style={styles.mp4TagText}>MP4</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.recordingBadgeTitle}>
+                  {hasVideo ? 'Screen recording' : 'Screenshot capture'}
+                </Text>
+                <Text style={styles.recordingBadgeSub}>
+                  Review the preview before sending; use ← to go back.
+                </Text>
+              </View>
             </View>
 
             {/* Screenshot + annotate */}
@@ -244,18 +265,18 @@ export const VideoTicketSheet: React.FC<Props> = ({
                   onPress={() => setPhase('annotate')}
                   disabled={loading || !screenshotUri}
                 >
-                  <Text style={styles.annotateBtnText}>✏️ Annoter</Text>
+                  <Text style={styles.annotateBtnText}>✏️ Annotate</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
 
             {error ? <Text style={styles.errorText}>⚠️ {error}</Text> : null}
 
-            <Text style={styles.label}>Titre <Text style={styles.req}>*</Text></Text>
+            <Text style={styles.label}>Title <Text style={styles.req}>*</Text></Text>
             <TextInput
               style={styles.input}
-              placeholder="Résumé du problème"
-              placeholderTextColor="#aaa"
+              placeholder="Issue summary"
+              placeholderTextColor={RT_MUTED + 'B8'}
               value={title}
               onChangeText={setTitle}
               editable={!loading}
@@ -265,8 +286,8 @@ export const VideoTicketSheet: React.FC<Props> = ({
             <Text style={styles.label}>Description <Text style={styles.req}>*</Text></Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Étapes pour reproduire…"
-              placeholderTextColor="#aaa"
+              placeholder="Steps to reproduce…"
+              placeholderTextColor={RT_MUTED + 'B8'}
               value={description}
               onChangeText={setDescription}
               multiline
@@ -274,6 +295,12 @@ export const VideoTicketSheet: React.FC<Props> = ({
               editable={!loading}
             />
 
+            {/* Spacer for sticky footer */}
+            <View style={{ height: 16 }} />
+          </ScrollView>
+
+          {/* Sticky submit footer */}
+          <View style={styles.submitFooter}>
             <TouchableOpacity
               style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
               onPress={handleSubmit}
@@ -281,10 +308,15 @@ export const VideoTicketSheet: React.FC<Props> = ({
             >
               {loading
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.submitBtnText}>Envoyer le ticket</Text>
+                : (
+                  <View style={styles.submitBtnContent}>
+                    <Text style={styles.submitBtnIcon}>✉</Text>
+                    <Text style={styles.submitBtnText}>Send</Text>
+                  </View>
+                )
               }
             </TouchableOpacity>
-          </ScrollView>
+          </View>
         </View>
       </FormOverlay>
     </Modal>
@@ -292,64 +324,113 @@ export const VideoTicketSheet: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
 
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: RT_SURFACE,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    maxHeight: '92%', paddingBottom: 24,
+    maxHeight: '92%', paddingBottom: 0,
   },
-  previewSheet: { padding: 24, alignItems: 'center', borderRadius: 20 },
+  previewSheet: {
+    padding: 24, alignItems: 'center', borderRadius: 20,
+    backgroundColor: '#fff',
+  },
 
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 12, alignSelf: 'center' },
 
-  // Preview phase
-  previewTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 6, textAlign: 'center' },
-  previewSub:   { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 20 },
+  // Preview phase (Flutter — titleMedium w700, bodySmall onSurfaceVariant)
+  previewTitle: { fontSize: 18, fontWeight: '700', color: RT_INK, marginBottom: 6, textAlign: 'center' },
+  previewSub:   { fontSize: 13, color: RT_MUTED, textAlign: 'center', marginBottom: 20, lineHeight: 18 },
   thumbBox:     { width: '100%', height: 200, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000', marginBottom: 24, alignItems: 'center', justifyContent: 'center' },
   thumb:        { width: '100%', height: '100%' },
   playBadge:    { position: 'absolute', width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
-  playIcon:     { fontSize: 22, color: '#1a1a2e' },
-  thumbPlaceholder: { width: '100%', height: 140, borderRadius: 14, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  thumbPlaceholderText: { fontSize: 20, color: '#9ca3af' },
+  playIcon:     { fontSize: 22, color: RT_INK },
+  thumbPlaceholder: { width: '100%', height: 140, borderRadius: 14, backgroundColor: RT_FIELD, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  thumbPlaceholderText: { fontSize: 20, color: RT_MUTED },
 
+  // Preview buttons (Flutter OutlinedButton + FilledButton)
   previewActions: { flexDirection: 'row', gap: 12, width: '100%' },
   btn:         { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  btnPrimary:  { backgroundColor: INDIGO },
-  btnOutline:  { borderWidth: 1.5, borderColor: INDIGO },
+  btnPrimary:  { backgroundColor: RT_BLUE },
+  btnOutline:  { borderWidth: 1.5, borderColor: RT_BLUE },
   btnText:     { color: '#fff', fontWeight: '800', fontSize: 15 },
-  btnOutlineText: { color: INDIGO },
+  btnOutlineText: { color: RT_BLUE },
 
-  // Form phase
-  header: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  backBtn:  { position: 'absolute', left: 16, top: 12, padding: 6 },
-  backBtnText: { fontSize: 22, color: INDIGO },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e' },
-  closeBtn: { position: 'absolute', right: 16, top: 12, padding: 6 },
-  closeBtnText: { fontSize: 18, color: '#888' },
+  // Form phase header
+  header: {
+    alignItems: 'center', paddingTop: 12, paddingHorizontal: 16,
+    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: RT_BORDER,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+  },
+  backBtn:      { position: 'absolute', left: 16, top: 12, padding: 6 },
+  backBtnText:  { fontSize: 22, color: RT_BLUE },
+  headerTitle:  { fontSize: 17, fontWeight: '700', color: RT_INK },
+  closeBtn:     { position: 'absolute', right: 16, top: 12, padding: 6 },
+  closeBtnText: { fontSize: 18, color: RT_MUTED },
 
   body: { padding: 20, gap: 12 },
 
+  // Recording badge (Flutter _GifAttachmentSummaryCard)
   recordingBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(94,92,230,0.08)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: RT_FIELD, borderRadius: 18,
+    paddingHorizontal: 14, paddingVertical: 14,
   },
-  recordingBadgeIcon: { fontSize: 18 },
-  recordingBadgeText: { fontSize: 13, fontWeight: '700', color: INDIGO },
+  recordingBadgeIcon: { fontSize: 26 },
+  recordingBadgeInfo: { flex: 1, gap: 3 },
+  recordingBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mp4Tag: {
+    backgroundColor: RT_BLUE_SOFT, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  mp4TagText: { fontSize: 11, fontWeight: '800', color: RT_BLUE, letterSpacing: 0.4 },
+  recordingBadgeTitle: { fontSize: 14, fontWeight: '700', color: RT_INK },
+  recordingBadgeSub: { fontSize: 12, color: RT_MUTED, lineHeight: 16 },
 
+  // Screenshot + annotate
   screenshotRow: { gap: 8 },
-  screenshot: { width: '100%', height: 130, borderRadius: 12, backgroundColor: '#f5f5f5' },
-  annotateBtn: { alignSelf: 'flex-end', backgroundColor: INDIGO + '18', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  annotateBtnText: { fontSize: 13, fontWeight: '700', color: INDIGO },
+  screenshot: { width: '100%', height: 130, borderRadius: 14, backgroundColor: RT_FIELD },
+  annotateBtn: {
+    alignSelf: 'flex-end',
+    backgroundColor: RT_BLUE + '18', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  annotateBtnText: { fontSize: 13, fontWeight: '700', color: RT_BLUE },
 
-  label: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  // Form fields (aligned with Flutter _fieldDecoration)
+  label: { fontSize: 13, fontWeight: '600', color: RT_MUTED },
   req:   { color: RED },
-  input: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1a1a2e', backgroundColor: '#fafafa' },
-  textArea: { height: 110, textAlignVertical: 'top' },
+  input: {
+    borderWidth: 1, borderColor: RT_BORDER,
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15,
+    fontSize: 15, color: RT_INK, backgroundColor: '#fff',
+  },
+  textArea: { height: 120, textAlignVertical: 'top' },
 
   errorText: { fontSize: 13, color: RED, fontWeight: '600' },
 
-  submitBtn: { backgroundColor: INDIGO, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
+  // Sticky submit footer
+  submitFooter: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: RT_BORDER + '59',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  submitBtn: {
+    backgroundColor: RT_BLUE, borderRadius: 16,
+    paddingVertical: 16, alignItems: 'center',
+    minHeight: 52, justifyContent: 'center',
+  },
   submitBtnDisabled: { opacity: 0.55 },
+  submitBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  submitBtnIcon: { fontSize: 16, color: '#fff' },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });

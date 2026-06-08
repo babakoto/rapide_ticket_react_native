@@ -38,6 +38,19 @@ import { AuthService }        from '../services/AuthService';
 
 const LogoImg = require('../assets/logo_rapide_ticket.png');
 
+// ─── Flutter color palette (_rt* from rapide_ticket_issue_feedback_builder.dart) ──
+const RT_BLUE      = '#2051E8';
+const RT_BLUE_SOFT = '#E8F0FF';
+const RT_INK       = '#172B4D';
+const RT_MUTED     = '#5E6C84';
+const RT_SURFACE   = '#F8FBFF';
+const RT_FIELD     = '#F7F9FC';
+const RT_BORDER    = '#DFE1E6';
+const RT_GREEN     = '#1F9D68';
+const INDIGO       = '#5E5CE6';
+const RED          = '#E53935';
+const GREEN        = '#22A06B';
+
 /**
  * Android fix: transparent Modals + KeyboardAvoidingView cause the form
  * to bounce up/down when focusing text fields. The system's adjustResize
@@ -279,7 +292,7 @@ export const RapideTicketModal: React.FC<Props> = ({
 
         {assigneesLoading ? (
           <View style={styles.pickerLoading}>
-            <ActivityIndicator color={INDIGO} />
+            <ActivityIndicator color={RT_BLUE} />
             <Text style={styles.pickerLoadingText}>Chargement…</Text>
           </View>
         ) : assignees.length === 0 ? (
@@ -391,11 +404,16 @@ export const RapideTicketModal: React.FC<Props> = ({
               </View>
             </View>
 
+            {/* Scrollable form */}
             <ScrollView
               contentContainerStyle={styles.body}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
+              {/* Title header */}
+              <Text style={styles.formTitle}>Create a ticket</Text>
+              <Text style={styles.formSubtitle}>Add a title, description, and attachments.</Text>
+
               {/* Screenshot preview */}
               {effectiveUri ? (
                 <View style={styles.screenshotRow}>
@@ -476,7 +494,7 @@ export const RapideTicketModal: React.FC<Props> = ({
               <TextInput
                 style={styles.input}
                 placeholder="Ex. : crash sur l'écran d'accueil"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={RT_MUTED + 'B8'}
                 value={title}
                 onChangeText={setTitle}
                 editable={!loading}
@@ -489,7 +507,7 @@ export const RapideTicketModal: React.FC<Props> = ({
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Décrivez les étapes pour reproduire le problème…"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={RT_MUTED + 'B8'}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -524,7 +542,7 @@ export const RapideTicketModal: React.FC<Props> = ({
                     ) : (
                       <View style={styles.assigneeBtnContent}>
                         {assigneesLoading
-                          ? <ActivityIndicator size="small" color={INDIGO} style={{ marginRight: 8 }} />
+                          ? <ActivityIndicator size="small" color={RT_BLUE} style={{ marginRight: 8 }} />
                           : <Text style={styles.assigneePlaceholderIcon}>👤</Text>
                         }
                         <Text style={styles.assigneePlaceholder}>
@@ -537,18 +555,29 @@ export const RapideTicketModal: React.FC<Props> = ({
                 </>
               )}
 
-              {/* Submit */}
+              {/* Spacer for the sticky footer */}
+              <View style={{ height: 24 }} />
+            </ScrollView>
+
+            {/* Sticky submit footer — matches Flutter _TicketFormBottomDock */}
+            <View style={styles.submitFooter}>
               <TouchableOpacity
                 style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
                 onPress={handleSubmit}
                 disabled={loading}
+                activeOpacity={0.8}
               >
                 {loading
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.submitBtnText}>Envoyer le ticket</Text>
+                  : (
+                    <View style={styles.submitBtnContent}>
+                      <Text style={styles.submitBtnIcon}>✉</Text>
+                      <Text style={styles.submitBtnText}>Send</Text>
+                    </View>
+                  )
                 }
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </FormOverlay>
         {assigneePickerView}
@@ -556,20 +585,18 @@ export const RapideTicketModal: React.FC<Props> = ({
   );
 };
 
-const INDIGO = '#5E5CE6';
-const RED    = '#E53935';
-const GREEN  = '#22A06B';
-
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: RT_SURFACE,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    maxHeight: '92%', paddingBottom: 24,
+    maxHeight: '92%', paddingBottom: 0,
   },
   header: {
     alignItems: 'center', paddingTop: 12, paddingHorizontal: 16,
-    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: RT_BORDER,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
   },
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 8 },
   headerRow: {
@@ -580,93 +607,120 @@ const styles = StyleSheet.create({
   headerLogo: { width: 120, height: 32 },
   headerSpacer: { width: 34 },
   logoutBtn: { padding: 6, width: 34, alignItems: 'center' },
-  logoutBtnIcon: { fontSize: 18, color: '#E53935' },
+  logoutBtnIcon: { fontSize: 18, color: RED },
   closeBtn: { padding: 6, width: 34, alignItems: 'center' },
-  closeBtnText: { fontSize: 18, color: '#888' },
+  closeBtnText: { fontSize: 18, color: RT_MUTED },
 
   body: { padding: 20, gap: 14 },
+
+  // Form header (Flutter _TicketFormLogoHeader + "Create a ticket")
+  formTitle: {
+    fontSize: 22, fontWeight: '800', color: RT_INK,
+    textAlign: 'center', letterSpacing: -0.35,
+  },
+  formSubtitle: {
+    fontSize: 13, color: RT_MUTED, textAlign: 'center',
+    lineHeight: 18, letterSpacing: 0, marginBottom: 6,
+  },
 
   // Screenshot
   screenshotRow: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 4 },
   screenshotBox: { flex: 1, position: 'relative' },
-  screenshot: { width: '100%', height: 140, borderRadius: 12, backgroundColor: '#f5f5f5' },
+  screenshot: { width: '100%', height: 140, borderRadius: 14, backgroundColor: RT_FIELD },
   annotatedBadge: {
     position: 'absolute', top: 8, right: 8,
-    backgroundColor: 'rgba(94,92,230,0.9)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: 'rgba(32,81,232,0.9)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
   annotatedBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   annotateBtn: {
     alignItems: 'center', justifyContent: 'center', gap: 4,
-    backgroundColor: INDIGO + '18', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: RT_BLUE + '18', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
   },
   annotateBtnIcon: { fontSize: 22 },
-  annotateBtnText: { fontSize: 11, fontWeight: '700', color: INDIGO },
+  annotateBtnText: { fontSize: 11, fontWeight: '700', color: RT_BLUE },
 
   // Recorder
   recorderRow: { gap: 10 },
   recorderInfo: { gap: 4 },
-  recorderLabel: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  recorderSub: { fontSize: 12, color: '#9ca3af' },
+  recorderLabel: { fontSize: 15, fontWeight: '700', color: RT_INK },
+  recorderSub: { fontSize: 12, color: RT_MUTED },
 
   recBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(229,57,53,0.08)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginTop: 4,
   },
-  recBadgeDone: { backgroundColor: 'rgba(34,160,107,0.1)' },
+  recBadgeDone: { backgroundColor: 'rgba(31,157,104,0.1)' },
   recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: RED },
   recDotPaused: { backgroundColor: '#BDBDBD' },
-  recTimer: { fontSize: 14, fontWeight: '800', color: '#1a1a2e', letterSpacing: 0.5 },
-  recMode: { fontSize: 12, color: '#6b7280' },
-  recDoneText: { fontSize: 13, fontWeight: '700', color: GREEN },
+  recTimer: { fontSize: 14, fontWeight: '800', color: RT_INK, letterSpacing: 0.5 },
+  recMode: { fontSize: 12, color: RT_MUTED },
+  recDoneText: { fontSize: 13, fontWeight: '700', color: RT_GREEN },
 
   recButtons: { flexDirection: 'row', gap: 8 },
   recBtn: {
-    flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center',
+    flex: 1, borderRadius: 14, paddingVertical: 10, alignItems: 'center',
   },
   recBtnStart: { backgroundColor: RED },
   recBtnPause: { backgroundColor: '#2684FF' },
   recBtnStop:  { backgroundColor: '#1E2330' },
   recBtnText:  { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  // Form fields
-  label: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: -8 },
+  // Form fields (aligned with Flutter _fieldDecoration)
+  label: { fontSize: 13, fontWeight: '600', color: RT_MUTED, marginBottom: -8 },
   req:   { color: RED },
   input: {
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)',
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 15, color: '#1a1a2e', backgroundColor: '#fafafa',
+    borderWidth: 1, borderColor: RT_BORDER,
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15,
+    fontSize: 15, color: RT_INK, backgroundColor: '#fff',
   },
-  textArea: { height: 110, textAlignVertical: 'top' },
+  textArea: { height: 120, textAlignVertical: 'top' },
 
   errorText: { fontSize: 13, color: RED, fontWeight: '600' },
 
   // Assignee button (trigger)
   assigneeBtn: {
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)',
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-    backgroundColor: '#fafafa',
+    borderWidth: 1, borderColor: RT_BORDER,
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15,
+    backgroundColor: '#fff',
   },
   assigneeBtnDisabled: { opacity: 0.55 },
   assigneeBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  assigneeBtnText: { flex: 1, fontSize: 15, color: '#1a1a2e', fontWeight: '500' },
-  assigneeBtnChevron: { fontSize: 20, color: '#aaa', marginLeft: 4 },
+  assigneeBtnText: { flex: 1, fontSize: 15, color: RT_INK, fontWeight: '500' },
+  assigneeBtnChevron: { fontSize: 20, color: RT_MUTED, marginLeft: 4 },
   assigneePlaceholderIcon: { fontSize: 16 },
-  assigneePlaceholder: { flex: 1, fontSize: 15, color: '#aaa' },
+  assigneePlaceholder: { flex: 1, fontSize: 15, color: RT_MUTED },
 
   // Avatar (small — inside button)
   avatarSmall: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: INDIGO + '22', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    backgroundColor: RT_BLUE + '22', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImageSmall: { width: 28, height: 28, borderRadius: 14 },
-  avatarInitialSmall: { fontSize: 13, fontWeight: '700', color: INDIGO },
+  avatarInitialSmall: { fontSize: 13, fontWeight: '700', color: RT_BLUE },
 
-  // Submit
+  // Sticky submit footer (Flutter pattern: DecoratedBox + SafeArea at bottom)
+  submitFooter: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: RT_BORDER + '59',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
   submitBtn: {
-    backgroundColor: INDIGO, borderRadius: 14,
-    paddingVertical: 15, alignItems: 'center', marginTop: 8,
+    backgroundColor: RT_BLUE, borderRadius: 16,
+    paddingVertical: 16, alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   submitBtnDisabled: { opacity: 0.55 },
+  submitBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  submitBtnIcon: { fontSize: 16, color: '#fff' },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
   // ── Picker modal ──────────────────────────────────────────────────────
@@ -684,15 +738,15 @@ const styles = StyleSheet.create({
   pickerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+    borderBottomWidth: 1, borderBottomColor: RT_BORDER,
   },
-  pickerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
+  pickerTitle: { fontSize: 18, fontWeight: '700', color: RT_INK },
   pickerCloseBtn: { padding: 6 },
-  pickerCloseText: { fontSize: 18, color: '#888' },
+  pickerCloseText: { fontSize: 18, color: RT_MUTED },
   pickerLoading: { padding: 32, alignItems: 'center', gap: 12 },
-  pickerLoadingText: { color: '#9ca3af', fontSize: 14 },
+  pickerLoadingText: { color: RT_MUTED, fontSize: 14 },
   pickerEmpty: { padding: 32, alignItems: 'center' },
-  pickerEmptyText: { color: '#9ca3af', fontSize: 15 },
+  pickerEmptyText: { color: RT_MUTED, fontSize: 15 },
   pickerList: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
 
   pickerItem: {
@@ -700,18 +754,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 14, marginBottom: 4,
   },
-  pickerItemSelected: { backgroundColor: INDIGO + '12' },
+  pickerItemSelected: { backgroundColor: RT_BLUE + '12' },
   avatar: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  avatarSelected: { backgroundColor: INDIGO + '22' },
+  avatarSelected: { backgroundColor: RT_BLUE + '22' },
   avatarImage: { width: 40, height: 40, borderRadius: 20 },
-  avatarInitial: { fontSize: 16, fontWeight: '700', color: '#6b7280' },
-  avatarInitialSelected: { color: INDIGO },
+  avatarInitial: { fontSize: 16, fontWeight: '700', color: RT_MUTED },
+  avatarInitialSelected: { color: RT_BLUE },
   pickerItemInfo: { flex: 1 },
-  pickerItemName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e' },
-  pickerItemNameSelected: { color: INDIGO },
-  pickerItemEmail: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  pickerCheckmark: { fontSize: 18, color: INDIGO, fontWeight: '700' },
+  pickerItemName: { fontSize: 15, fontWeight: '600', color: RT_INK },
+  pickerItemNameSelected: { color: RT_BLUE },
+  pickerItemEmail: { fontSize: 12, color: RT_MUTED, marginTop: 2 },
+  pickerCheckmark: { fontSize: 18, color: RT_BLUE, fontWeight: '700' },
 });
